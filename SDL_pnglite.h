@@ -53,7 +53,7 @@ extern DECLSPEC SDL_Surface *SDLCALL SDL_LoadPNG_RW(SDL_RWops * src,
  *  
  *  Convenience macro.
  */
-#define SDL_LoadPNG(surface, file) \
+#define SDL_LoadPNG(file) \
                 SDL_LoadPNG_RW(SDL_RWFromFile(file, "rb"), 1)
 
 /**
