@@ -1,0 +1,336 @@
+/*
+  SDL_pnglite: An example PNG loader/writer for adding to SDL
+
+  Copyright (C) 2012 Alexander Sabourenkov <screwdriver@lxnt.info>
+
+  This software is provided 'as-is', without any express or implied
+  warranty.  In no event will the authors be held liable for any damages
+  arising from the use of this software.
+
+  Permission is granted to anyone to use this software for any purpose,
+  including commercial applications, and to alter it and redistribute it
+  freely, subject to the following restrictions:
+
+  1. The origin of this software must not be misrepresented; you must not
+     claim that you wrote the original software. If you use this software
+     in a product, an acknowledgment in the product documentation would be
+     appreciated but is not required.
+  2. Altered source versions must be plainly marked as such, and must not be
+     misrepresented as being the original software.
+  3. This notice may not be removed or altered from any source distribution.
+*/
+
+#include "SDL_video.h"
+#include "SDL_endian.h"
+#include "SDL_pixels.h"
+/*#include "SDL_error.h"*/
+
+#include <pnglite.h>
+
+static unsigned 
+rwops_read_wrapper(void* buf, size_t size, size_t num, void* baton)
+{
+    SDL_RWops *rwops = (SDL_RWops *) baton;
+    if (!buf) {
+        if (SDL_RWseek(rwops, size * num, RW_SEEK_CUR) < 0) {
+            SDL_Error(SDL_EFSEEK);
+            return 0;
+        }
+        return size * num;
+    }
+    
+    return SDL_RWread(rwops, buf, size, num);
+}
+
+static unsigned 
+rwops_write_wrapper(void* buf, size_t size, size_t num, void* baton)
+{
+    SDL_RWops *rwops = (SDL_RWops *) baton;
+    size_t rv;
+    if (!buf) 
+        return 0;
+    
+    rv = SDL_RWwrite(rwops, buf, size, num);
+    if (rv != size*num)
+        SDL_Error(SDL_EFWRITE);
+    return 0;
+}
+
+SDL_Surface *
+SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
+{
+    Sint64 fp_offset = 0;
+    SDL_Surface *surface = NULL;
+    int rv;
+    png_t png;
+    Uint8  *data = NULL;
+    int bpp = 32;
+    Uint32 Rmask = 0;
+    Uint32 Gmask = 0;
+    Uint32 Bmask = 0;
+    Uint32 Amask = 0;
+    int row;
+    int col;
+    Uint8 gray_level;
+    Uint8 alpha;
+    Uint64 pixel; /* what if we get 3-gigapixel PNG ? */
+    Uint8 *pitched_row;
+    Uint8 *packed_row;
+    Uint32 row_bytes;
+    
+    if (src == NULL) {
+        goto error;
+    }
+
+    /* this is perfectly safe to call multiple times 
+       as long as parameters don't change */
+    png_init(SDL_malloc, SDL_free);
+
+    fp_offset = SDL_RWtell(src);
+    SDL_ClearError();
+
+    rv = png_open_read(&png, rwops_read_wrapper, src);
+    if (rv != PNG_NO_ERROR) {
+        SDL_SetError("png_open_read(): %s", png_error_string(rv));
+        goto error;
+    }
+    
+    if (png.bpp != 8) {
+        /* support loading 16bpc by losing lsbs ? */
+        SDL_SetError("pnglite: %d bits per channel not supported", png.bpp);
+        goto error;
+    }
+    
+    switch (png.color_type) {
+        case PNG_TRUECOLOR_ALPHA:
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+            Rmask = 0xFF000000;
+            Gmask = 0x00FF0000;
+            Bmask = 0x0000FF00;
+            Amask = 0x000000FF;
+#else
+            Rmask = 0x000000FF;
+            Gmask = 0x0000FF00;
+            Bmask = 0x00FF0000;
+            Amask = 0xFF000000;
+#endif
+            /* should be no problems with pitch */
+            surface = SDL_CreateRGBSurface(0, png.width, png.height, bpp,
+                                           Rmask, Gmask, Bmask, Amask);
+            if (!surface) {
+                goto error;
+            }
+            rv = png_get_data(&png, surface->pixels);
+            if (rv != PNG_NO_ERROR) {
+                SDL_SetError("png_get_data(): %s", png_error_string(rv));
+                goto error;
+            }
+            goto done;
+
+       case  PNG_TRUECOLOR:
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+            Rmask = 0x00FF0000;
+            Gmask = 0x0000FF00;
+            Bmask = 0x000000FF;
+            Amask = 0x00000000;
+#else
+            Rmask = 0x000000FF;
+            Gmask = 0x0000FF00;
+            Bmask = 0x00FF0000;
+            Amask = 0x00000000;
+#endif
+            bpp = 24;
+        /* have to memmove rows to account for the pitch */
+            surface = SDL_CreateRGBSurface(0, png.width, png.height, bpp,
+                                           Rmask, Gmask, Bmask, Amask);
+            if (!surface) {
+                goto error;
+            }
+            rv = png_get_data(&png, surface->pixels);
+            if (rv != PNG_NO_ERROR) {
+                SDL_SetError("png_get_data(): %s", png_error_string(rv));
+                goto error;
+            }
+            row_bytes = surface->w * bpp;
+            for (row = png.height - 1; row >= 0; row --) {
+                pitched_row = surface->pixels + row * surface->pitch;
+                packed_row  = surface->pixels + row * row_bytes;
+                SDL_memmove(pitched_row, packed_row, row_bytes);
+            }
+            goto done;
+
+        case PNG_GREYSCALE:
+            SDL_PixelFormatEnumToMasks(SDL_PIXELFORMAT_RGB24,
+                            &bpp, &Rmask, &Gmask, &Bmask, &Amask);
+            surface = SDL_CreateRGBSurface(0, png.width, png.height, bpp,
+                                           Rmask, Gmask, Bmask, Amask);
+            if (!surface) {
+                goto error;
+            }
+            data = SDL_malloc(png.width * png.height * png.bpp);
+            if (!data) {
+                SDL_OutOfMemory();
+                goto error;
+            }
+            rv = png_get_data(&png, data);
+            if (rv != PNG_NO_ERROR) {
+                SDL_SetError("png_get_data(): %s", png_error_string(rv));
+                goto error;
+            }
+            for(pixel = 0 ; pixel < png.width * png.height ; pixel++) {
+                row = pixel / png.width;
+                col = pixel % png.width;
+                gray_level = *(data + pixel);
+                /* intentionally unaligned writes ... this is going to be slow,
+                   even if I get it to work at all. */
+                *( (Uint32 *) surface->pixels + row * surface->pitch +
+                        col) = (gray_level << 24) | (gray_level << 16) |
+                            ( gray_level << 8 );
+            }
+            goto done;
+
+        case PNG_GREYSCALE_ALPHA:
+            SDL_PixelFormatEnumToMasks(SDL_PIXELFORMAT_RGBA8888,
+                            &bpp, &Rmask, &Gmask, &Bmask, &Amask);
+            surface = SDL_CreateRGBSurface(0, png.width, png.height, bpp,
+                                           Rmask, Gmask, Bmask, Amask);
+            if (!surface) {
+                goto error;
+            }
+            data = SDL_malloc(png.width * png.height * png.bpp);
+            if (!data) {
+                SDL_OutOfMemory();
+                goto error;
+            }
+            rv = png_get_data(&png, data);
+            if (rv != PNG_NO_ERROR) {
+                SDL_SetError("png_get_data(): %s", png_error_string(rv));
+                goto error;
+            }
+            for(pixel = 0 ; pixel < png.width * png.height ; pixel++) {
+                row = pixel / png.width;
+                col = pixel % png.width;
+                gray_level = *(data + 2*pixel + 1);
+                alpha = *(data + 2*pixel + 1);
+                *( (Uint32 *) surface->pixels + row * surface->pitch +
+                        col) = (gray_level << 24) | (gray_level << 16) |
+                            ( gray_level << 8 ) | alpha;
+            }
+            goto done;
+
+        default:
+        /* the four indexed formats are not supported by pnglite 
+           at the moment, we won't get here, but error out just in case */
+            SDL_SetError("pnglite: color type %d not supported", 
+                            png.color_type);
+            goto error;
+    }
+
+    goto done;
+
+  error:
+    if (src) {
+        SDL_RWseek(src, fp_offset, RW_SEEK_SET);
+    }
+    if (surface) {
+        SDL_FreeSurface(surface);
+    }
+    surface = NULL;
+
+  done:
+    if (data) {
+        SDL_free(data);
+    }
+    if (freesrc && src) {
+        SDL_RWclose(src);
+    }
+    return (surface);
+}
+
+int
+SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
+{
+    SDL_Surface *tmp = NULL;
+    SDL_PixelFormat *format;
+    png_t png;
+    Uint8 *data;
+    Uint8 png_color_type;
+    int i;
+    int rv;
+    Uint32 unpitched_row_bytes;
+    Uint32 pitched_row_bytes;
+
+    if (src && dst) {
+        if (SDL_ISPIXELFORMAT_ALPHA(src->format->format)) {
+            format = SDL_AllocFormat(
+#if SDL_BYTEORDER == SDL_LIL_ENDIAN
+                            SDL_PIXELFORMAT_ARGB8888
+#else
+                            SDL_PIXELFORMAT_BGRA8888
+#endif
+                            );
+            png_color_type = PNG_TRUECOLOR_ALPHA;
+        } else {
+            format = SDL_AllocFormat(SDL_PIXELFORMAT_RGB24);
+            png_color_type = PNG_TRUECOLOR;
+        }
+        if (!format) {
+            if (freedst) {
+                SDL_RWclose(dst);
+            }
+            return -1;
+        }
+        tmp = SDL_ConvertSurface(src, format, 0);
+        if (!tmp) {
+            SDL_SetError("Couldn't convert image to %s",
+                         SDL_GetPixelFormatName(format->format));
+        }
+    }
+    if (tmp) {
+        unpitched_row_bytes = tmp->w * tmp->format->BytesPerPixel;
+        pitched_row_bytes = tmp->w * tmp->pitch;
+        data = SDL_malloc(unpitched_row_bytes * tmp->h);
+        if (!data) {
+            SDL_OutOfMemory();
+            SDL_FreeSurface(tmp);
+            if (freedst) {
+                SDL_RWclose(dst);
+            }
+            return -1;
+        }
+        /* now get rid of pitch */
+        for(i = 0; i < tmp->h ; i++) {
+            SDL_memmove(data + unpitched_row_bytes * i,
+                        tmp->pixels + pitched_row_bytes *i,
+                        pitched_row_bytes);
+        }
+        SDL_FreeSurface(tmp);
+        
+        /* write out and be done */
+        rv = png_open_write(&png, rwops_write_wrapper, dst);
+        if (rv != PNG_NO_ERROR) {
+            SDL_SetError("png_open_write(): %s", png_error_string(rv));
+            SDL_free(data);
+            if (freedst) {
+                SDL_RWclose(dst);
+            }            
+            return -1;
+        }
+
+        rv = png_set_data(&png, tmp->w, tmp->h, 8, png_color_type, data);
+        if (rv != PNG_NO_ERROR) {
+            SDL_SetError("png_set_data(): %s", png_error_string(rv));
+            SDL_free(data);
+            if (freedst) {
+                SDL_RWclose(dst);
+            }            
+            return -1;
+        }
+        SDL_free(data);
+        if (freedst) {
+            SDL_RWclose(dst);
+        }
+        return 0;
+    }
+    return -1;
+}
