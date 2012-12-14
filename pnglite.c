@@ -629,11 +629,15 @@ static int png_process_chunk(png_t* png)
                 if (length > 6)
                     return PNG_FILE_ERROR;
                 file_read(png, png->colorkey, 6, 1);
+                png->colorkey[0] = png->colorkey[1];
+                png->colorkey[1] = png->colorkey[3];
+                png->colorkey[2] = png->colorkey[5];
                 break;
             case PNG_GREYSCALE:
                 if (length > 2)
                     return PNG_FILE_ERROR;
                 file_read(png, png->colorkey, 2, 1);
+                png->colorkey[0] = png->colorkey[1];
                 break;
             default:
                 return PNG_FILE_ERROR;
@@ -923,6 +927,9 @@ int png_get_data(png_t* png, unsigned char* data)
 	png_free(png->png_data); 
         if (png->depth < 8) {
             packed_data = png_alloc(png->width * png->height);
+            if (!trns)
+                return PNG_MEMORY_ERROR;
+
             memmove(packed_data, data, png->width * png->height);
             unpacked_pixel = data;
             packed_pixel = packed_data;
