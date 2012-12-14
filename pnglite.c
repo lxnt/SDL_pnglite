@@ -910,6 +910,7 @@ int png_get_data(png_t* png, unsigned char* data)
     unsigned char *packed_data;
 
     png->transparency_present = 0;
+    png->png_data = NULL;
 
 	while(result == PNG_NO_ERROR)
 	{
@@ -918,8 +919,9 @@ int png_get_data(png_t* png, unsigned char* data)
 
 	if(result != PNG_DONE)
 	{
-		png_free(png->png_data); 
-		return result;
+            if (png->png_data)
+		png_free(png->png_data);
+            return result;
 	}
 
 	result = png_unfilter(png, data);
