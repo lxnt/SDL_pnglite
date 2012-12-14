@@ -76,6 +76,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
     Uint64 pixel; /* what if we get 3-gigapixel PNG ? */
     Uint8 *pitched_row;
     Uint8 *packed_row;
+    Uint8 *pixel_start;
     Uint32 row_bytes;
 
     if (src == NULL) {
@@ -178,14 +179,15 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 goto error;
             }
             for(pixel = 0 ; pixel < png.width * png.height ; pixel++) {
+                gray_level = *(data + pixel);
                 row = pixel / png.width;
                 col = pixel % png.width;
-                gray_level = *(data + pixel);
-                /* intentionally unaligned writes ... this is going to be slow,
-                   even if I get it to work at all. */
-                *( (Uint32 *) surface->pixels + row * surface->pitch +
-                        col) = (gray_level << 24) | (gray_level << 16) |
-                            ( gray_level << 8 );
+                pixel_start = (Uint8*)(surface->pixels) + 
+                                        row*surface->pitch + col*3;
+                
+                *pixel_start++ = gray_level;
+                *pixel_start++ = gray_level;
+                *pixel_start++ = gray_level;
             }
             goto done;
 
@@ -210,11 +212,15 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
             for(pixel = 0 ; pixel < png.width * png.height ; pixel++) {
                 row = pixel / png.width;
                 col = pixel % png.width;
-                gray_level = *(data + 2*pixel + 1);
+                gray_level = *(data + 2*pixel);
                 alpha = *(data + 2*pixel + 1);
-                *( (Uint32 *) surface->pixels + row * surface->pitch +
-                        col) = (gray_level << 24) | (gray_level << 16) |
-                            ( gray_level << 8 ) | alpha;
+                pixel_start = (Uint8*)(surface->pixels) + 
+                                        row*surface->pitch + col*4;
+                
+                *pixel_start++ = alpha;
+                *pixel_start++ = gray_level;
+                *pixel_start++ = gray_level;
+                *pixel_start++ = gray_level;
             }
             goto done;
 
