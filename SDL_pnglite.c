@@ -128,7 +128,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
             }
             goto done;
 
-       case  PNG_TRUECOLOR:
+        case PNG_TRUECOLOR:
 #if SDL_BYTEORDER == SDL_BIG_ENDIAN
             Rmask = 0x00FF0000;
             Gmask = 0x0000FF00;
