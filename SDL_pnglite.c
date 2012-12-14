@@ -334,7 +334,7 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
     if (data) {
         SDL_free(data);
     }
-    if (freedst) {
+    if (freedst && dst) {
         SDL_RWclose(dst);
     }
 
