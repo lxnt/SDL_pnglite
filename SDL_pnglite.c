@@ -25,7 +25,7 @@
 #include "SDL_pixels.h"
 /*#include "SDL_error.h"*/
 
-#include <pnglite.h>
+#include "pnglite.h"
 
 static unsigned
 rwops_read_wrapper(void* buf, size_t size, size_t num, void* baton)
@@ -71,6 +71,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
     Uint32 Amask = 0;
     int row;
     int col;
+    Uint8 index;
     Uint8 gray_level;
     Uint8 alpha;
     Uint64 pixel; /* what if we get 3-gigapixel PNG ? */
@@ -78,6 +79,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
     Uint8 *packed_row;
     Uint8 *pixel_start;
     Uint32 row_bytes;
+    Uint32 color;
 
     if (src == NULL) {
         goto error;
@@ -116,7 +118,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
             Amask = 0xFF000000;
 #endif
             /* should be no problems with pitch */
-            surface = SDL_CreateRGBSurface(0, png.width, png.height, bpp,
+            surface = SDL_CreateRGBSurface(0, png.width, png.height, 32,
                                            Rmask, Gmask, Bmask, Amask);
             if (!surface) {
                 goto error;
@@ -142,7 +144,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
 #endif
             bpp = 24;
         /* have to memmove rows to account for the pitch */
-            surface = SDL_CreateRGBSurface(0, png.width, png.height, bpp,
+            surface = SDL_CreateRGBSurface(0, png.width, png.height, 24,
                                            Rmask, Gmask, Bmask, Amask);
             if (!surface) {
                 goto error;
@@ -158,12 +160,17 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 packed_row  = surface->pixels + row * row_bytes;
                 SDL_memmove(pitched_row, packed_row, row_bytes);
             }
+            if (png.transparency_present) {
+                color = SDL_MapRGB(surface->format, png.colorkey[0],
+                                    png.colorkey[1], png.colorkey[2]);
+                SDL_SetColorKey(surface, SDL_TRUE, color);
+            }
             goto done;
 
         case PNG_GREYSCALE:
             SDL_PixelFormatEnumToMasks(SDL_PIXELFORMAT_RGB24,
                             &bpp, &Rmask, &Gmask, &Bmask, &Amask);
-            surface = SDL_CreateRGBSurface(0, png.width, png.height, bpp,
+            surface = SDL_CreateRGBSurface(0, png.width, png.height, 24,
                                            Rmask, Gmask, Bmask, Amask);
             if (!surface) {
                 goto error;
@@ -182,19 +189,24 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 gray_level = *(data + pixel);
                 row = pixel / png.width;
                 col = pixel % png.width;
-                pixel_start = (Uint8*)(surface->pixels) + 
+                pixel_start = (Uint8*)(surface->pixels) +
                                         row*surface->pitch + col*3;
-                
+
                 *pixel_start++ = gray_level;
                 *pixel_start++ = gray_level;
                 *pixel_start++ = gray_level;
+            }
+            if (png.transparency_present) {
+                color = SDL_MapRGB(surface->format, png.colorkey[0],
+                                        png.colorkey[0], png.colorkey[0]);
+                SDL_SetColorKey(surface, SDL_TRUE, color);
             }
             goto done;
 
         case PNG_GREYSCALE_ALPHA:
             SDL_PixelFormatEnumToMasks(SDL_PIXELFORMAT_RGBA8888,
                             &bpp, &Rmask, &Gmask, &Bmask, &Amask);
-            surface = SDL_CreateRGBSurface(0, png.width, png.height, bpp,
+            surface = SDL_CreateRGBSurface(0, png.width, png.height, 32,
                                            Rmask, Gmask, Bmask, Amask);
             if (!surface) {
                 goto error;
@@ -214,9 +226,9 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 col = pixel % png.width;
                 gray_level = *(data + 2*pixel);
                 alpha = *(data + 2*pixel + 1);
-                pixel_start = (Uint8*)(surface->pixels) + 
+                pixel_start = (Uint8*)(surface->pixels) +
                                         row*surface->pitch + col*4;
-                
+
                 *pixel_start++ = alpha;
                 *pixel_start++ = gray_level;
                 *pixel_start++ = gray_level;
@@ -224,11 +236,60 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
             }
             goto done;
 
+        case PNG_INDEXED:
+            if (png.transparency_present) {
+                SDL_PixelFormatEnumToMasks(SDL_PIXELFORMAT_RGBA8888,
+                                &bpp, &Rmask, &Gmask, &Bmask, &Amask);
+                surface = SDL_CreateRGBSurface(0, png.width, png.height, 32,
+                                               Rmask, Gmask, Bmask, Amask);
+                if (!surface) {
+                    goto error;
+                }
+                data = SDL_malloc(png.width * png.height);
+                if (!data) {
+                    SDL_OutOfMemory();
+                    goto error;
+                }
+                rv = png_get_data(&png, data);
+                if (rv != PNG_NO_ERROR) {
+                    SDL_SetError("png_get_data(): %s", png_error_string(rv));
+                    goto error;
+                }
+                for(pixel = 0 ; pixel < png.width * png.height ; pixel++) {
+                    row = pixel / png.width;
+                    col = pixel % png.width;
+                    index = *(data + pixel);
+                    pixel_start = (Uint8*)(surface->pixels) +
+                                            row*surface->pitch + col*4;
+                    *pixel_start++ = png.palette[4*index + 3];
+                    *pixel_start++ = png.palette[4*index + 2];
+                    *pixel_start++ = png.palette[4*index + 1];
+                    *pixel_start++ = png.palette[4*index + 0];
+                }
+            } else {
+                surface = SDL_CreateRGBSurface(0, png.width, png.height, 8,
+                                                0, 0, 0, 0);
+                if (!surface) {
+                    goto error;
+                }
+                rv = png_get_data(&png, surface->pixels);
+                if (rv != PNG_NO_ERROR) {
+                    SDL_SetError("png_get_data(): %s", png_error_string(rv));
+                    goto error;
+                }
+                if (surface->pitch != surface->w) {
+                    row_bytes = surface->w;
+                    for (row = png.height - 1; row >= 0; row --) {
+                        pitched_row = surface->pixels + row * surface->pitch;
+                        packed_row  = surface->pixels + row * row_bytes;
+                        SDL_memmove(pitched_row, packed_row, row_bytes);
+                    }
+                }
+            }
+            goto done;
+
         default:
-        /* the four indexed formats are not supported by pnglite
-           at the moment, we won't get here, but error out just in case */
-            SDL_SetError("pnglite: color type %d not supported",
-                            png.color_type);
+            SDL_SetError("bogus color type %d", png.color_type);
             goto error;
     }
 
