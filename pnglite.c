@@ -927,7 +927,7 @@ int png_get_data(png_t* png, unsigned char* data)
 	png_free(png->png_data); 
         if (png->depth < 8) {
             packed_data = png_alloc(png->width * png->height);
-            if (!trns)
+            if (!packed_data)
                 return PNG_MEMORY_ERROR;
 
             memmove(packed_data, data, png->width * png->height);
