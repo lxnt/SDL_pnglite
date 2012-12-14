@@ -86,10 +86,14 @@ typedef struct
 	unsigned char*			png_data;
 	unsigned				png_datalen;
 
+    unsigned char			palette[4*256];
+    unsigned char			colorkey[6];
+    
 	unsigned				width;
 	unsigned				height;
 	unsigned char			depth;
 	unsigned char			color_type;
+    unsigned char			transparency_present;
 	unsigned char			compression_method;
 	unsigned char			filter_method;
 	unsigned char			interlace_method;

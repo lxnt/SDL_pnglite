@@ -131,19 +131,19 @@ static int png_get_bpp(png_t* png)
 	{
 	case PNG_GREYSCALE:
 		bpp = 1; break;
-	case PNG_TRUECOLOR:
-		bpp = 3; break;
 	case PNG_INDEXED:
 		bpp = 1; break;
 	case PNG_GREYSCALE_ALPHA:
 		bpp = 2; break;
+	case PNG_TRUECOLOR:
+		bpp = 3; break;
 	case PNG_TRUECOLOR_ALPHA:
 		bpp = 4; break;
 	default:
 		return PNG_FILE_ERROR;
 	}
 
-	bpp *= png->depth/8;
+	bpp = (bpp * png->depth) >> 3;
 
 	return bpp;
 }
@@ -188,9 +188,6 @@ static int png_read_ihdr(png_t* png)
 	png->interlace_method = ihdr[16];
 
 	if(png->color_type == PNG_INDEXED)
-		return PNG_NOT_SUPPORTED;
-
-	if(png->depth != 8 && png->depth != 16)
 		return PNG_NOT_SUPPORTED;
 
 	if(png->interlace_method)
@@ -597,13 +594,52 @@ static int png_process_chunk(png_t* png)
 	int result = PNG_NO_ERROR;
 	unsigned type;
 	unsigned length;
+    unsigned char *trns;
+    unsigned i;
 
 	file_read_ul(png, &length);
 
 	if(file_read(png, &type, 1, 4) != 4)
 		return PNG_FILE_ERROR;
 
-	if(type == *(unsigned int*)"IDAT")	/* if we found an idat, all other idats should be followed with no other chunks in between */
+    if (type == *(unsigned int*)"PLTE")
+    {
+        /* set up default alpha */
+        for (i = 0; i < 1024; i++)
+            png->palette[i] = (i + 1) % 4 ? 0 : 255;
+
+        file_read(png, png->palette, 1, length);
+    }
+    else if (type == *(unsigned int*)"tRNS")
+    {
+        png->transparency_present = 1;
+        switch(png->color_type) {
+            case PNG_INDEXED:
+                if (length > 256)
+                    return PNG_FILE_ERROR;
+                trns = png_alloc(length);
+                if (!trns)
+                    return PNG_MEMORY_ERROR;
+                file_read(png, trns, length, 1);
+                for (i = 0; i < length/3; i++)
+                    png->palette[4*i+3] = trns[i];
+                png_free(trns);
+                break;
+            case PNG_TRUECOLOR:
+                if (length > 6)
+                    return PNG_FILE_ERROR;
+                file_read(png, png->colorkey, 6, 1);
+                break;
+            case PNG_GREYSCALE:
+                if (length > 2)
+                    return PNG_FILE_ERROR;
+                file_read(png, png->colorkey, 2, 1);
+                break;
+            default:
+                return PNG_FILE_ERROR;
+        }
+    }
+	else if(type == *(unsigned int*)"IDAT")	/* if we found an idat, all other idats should be followed with no other chunks in between */
 	{
 		png->png_datalen = png->width * png->height * png->bpp + png->height;
 		png->png_data = png_alloc(png->png_datalen);
@@ -623,6 +659,76 @@ static int png_process_chunk(png_t* png)
 	}
 
 	return result;
+}
+
+static int png_write_plte(png_t *png)
+{
+    unsigned char plte[4 + 4 + 768 + 4];
+    int i;
+    const int length = 768;
+    unsigned long crc;
+
+    set_ul(plte, length);
+    memmove(plte + 4, "PLTE", 4);
+    for(i = 0 ; i < 256; i++)
+    {
+        plte[8 + 3*i + 0] = png->palette[4*i + 0];
+        plte[8 + 3*i + 1] = png->palette[4*i + 1];
+        plte[8 + 3*i + 2] = png->palette[4*i + 2];
+    }
+    crc = crc32(0L, Z_NULL, 0);
+    crc = crc32(0L, plte + 4, length);
+    set_ul(plte + 8 + length, crc);
+
+    if (1 !=  file_write(png, plte, 12 + length, 1))
+        return PNG_IO_ERROR;
+
+    return PNG_NO_ERROR;
+}
+
+static int png_write_trns(png_t *png)
+{
+    unsigned char trns[4 + 4 + 256 + 4];
+    int i;
+    int length;
+    unsigned long crc;
+
+    switch (png->color_type) {
+        case PNG_INDEXED:
+            length = 256;
+            for(i = 0 ; i < 256; i++)
+                trns[8 + i] = png->palette[4*i + 3];
+            break;
+
+        case PNG_GREYSCALE:
+            length = 2;
+            trns[8 + 0] = 0;
+            trns[8 + 1] = png->colorkey[0];
+            break;
+
+        case PNG_TRUECOLOR:
+            length = 6;
+            trns[8 + 0] = 0;
+            trns[8 + 1] = png->colorkey[0];
+            trns[8 + 2] = 0;
+            trns[8 + 3] = png->colorkey[1];
+            trns[8 + 4] = 0;
+            trns[8 + 5] = png->colorkey[2];
+            break;
+
+        default:
+            return PNG_NOT_SUPPORTED;
+    }
+    memmove(trns + 4, "tRNS", 4);
+    crc = crc32(0L, Z_NULL, 0);
+    crc = crc32(0L, trns + 4, length + 4);
+    set_ul(trns + 8 + length, crc);
+    set_ul(trns, length);
+
+    if (1 !=  file_write(png, trns, 12 + length, 1))
+        return PNG_IO_ERROR;
+
+    return PNG_NO_ERROR;
 }
 
 static void png_filter_sub(int stride, unsigned char* in, unsigned char* out, int len)
@@ -729,8 +835,6 @@ static void png_filter_paeth(int stride, unsigned char* in, unsigned char* out, 
 
 static int png_filter(png_t* png, unsigned char* data)
 {
-
-
 	return PNG_NO_ERROR;
 }
 
@@ -797,6 +901,11 @@ static int png_unfilter(png_t* png, unsigned char* data)
 int png_get_data(png_t* png, unsigned char* data)
 {
 	int result = PNG_NO_ERROR;
+    unsigned char *unpacked_pixel;
+    unsigned char *packed_pixel;
+    unsigned char *packed_data;
+
+    png->transparency_present = 0;
 
 	while(result == PNG_NO_ERROR)
 	{
@@ -812,13 +921,48 @@ int png_get_data(png_t* png, unsigned char* data)
 	result = png_unfilter(png, data);
 
 	png_free(png->png_data); 
-
+        if (png->depth < 8) {
+            packed_data = png_alloc(png->width * png->height);
+            memmove(packed_data, data, png->width * png->height);
+            unpacked_pixel = data;
+            packed_pixel = packed_data;
+            
+            while (data - unpacked_pixel < png->width * png->height) {
+                switch (png->depth) {
+                    case 1:
+                        *unpacked_pixel++ = (*packed_pixel & 0x80) ? 1 : 0;
+                        *unpacked_pixel++ = (*packed_pixel & 0x40) ? 1 : 0;
+                        *unpacked_pixel++ = (*packed_pixel & 0x20) ? 1 : 0;
+                        *unpacked_pixel++ = (*packed_pixel & 0x10) ? 1 : 0;
+                        *unpacked_pixel++ = (*packed_pixel & 0x08) ? 1 : 0;
+                        *unpacked_pixel++ = (*packed_pixel & 0x04) ? 1 : 0;
+                        *unpacked_pixel++ = (*packed_pixel & 0x02) ? 1 : 0;
+                        *unpacked_pixel++ = (*packed_pixel & 0x01) ? 1 : 0;
+                    case 2:
+                        *unpacked_pixel++ = (*packed_pixel & 0xC0) >> 6;
+                        *unpacked_pixel++ = (*packed_pixel & 0x30) >> 4;
+                        *unpacked_pixel++ = (*packed_pixel & 0x0C) >> 2;
+                        *unpacked_pixel++ = (*packed_pixel & 0x03);
+                        break;
+                    case 4:
+                        *unpacked_pixel++ = (*packed_pixel & 0xF0) >> 4;
+                        *unpacked_pixel++ = (*packed_pixel & 0x0F);
+                        break;
+                    default:
+                        return PNG_HEADER_ERROR;
+                }
+                packed_pixel++;
+            }
+            png_free(packed_data);
+        }
+        
 	return result;
 }
 
 int png_set_data(png_t* png, unsigned width, unsigned height, char depth, int color, unsigned char* data)
 {
-	int i;
+	unsigned i;
+        int err;
 	unsigned char *filtered;
 	png->width = width;
 	png->height = height;
@@ -836,6 +980,15 @@ int png_set_data(png_t* png, unsigned width, unsigned height, char depth, int co
 
 	png_filter(png, filtered);
 	png_write_ihdr(png);
+
+    if (png->color_type == PNG_INDEXED)
+        if ((err = png_write_plte(png)))
+            return err;
+
+    if (png->transparency_present)
+        if ((err = png_write_trns(png)))
+            return err;
+
 	png_write_idats(png, filtered);
 	
 	png_free(filtered);
