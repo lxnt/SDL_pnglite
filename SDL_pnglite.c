@@ -237,22 +237,22 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
             goto done;
 
         case PNG_INDEXED:
+            data = SDL_malloc(png.width * png.height);
+            if (!data) {
+                SDL_OutOfMemory();
+                goto error;
+            }
+            rv = png_get_data(&png, data);
+            if (rv != PNG_NO_ERROR) {
+                SDL_SetError("png_get_data(): %s", png_error_string(rv));
+                goto error;
+            }
             if (png.transparency_present) {
                 SDL_PixelFormatEnumToMasks(SDL_PIXELFORMAT_RGBA8888,
                                 &bpp, &Rmask, &Gmask, &Bmask, &Amask);
                 surface = SDL_CreateRGBSurface(0, png.width, png.height, 32,
                                                Rmask, Gmask, Bmask, Amask);
                 if (!surface) {
-                    goto error;
-                }
-                data = SDL_malloc(png.width * png.height);
-                if (!data) {
-                    SDL_OutOfMemory();
-                    goto error;
-                }
-                rv = png_get_data(&png, data);
-                if (rv != PNG_NO_ERROR) {
-                    SDL_SetError("png_get_data(): %s", png_error_string(rv));
                     goto error;
                 }
                 for(pixel = 0 ; pixel < png.width * png.height ; pixel++) {
@@ -270,11 +270,6 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 surface = SDL_CreateRGBSurface(0, png.width, png.height, 8,
                                                 0, 0, 0, 0);
                 if (!surface) {
-                    goto error;
-                }
-                rv = png_get_data(&png, surface->pixels);
-                if (rv != PNG_NO_ERROR) {
-                    SDL_SetError("png_get_data(): %s", png_error_string(rv));
                     goto error;
                 }
                 if (surface->pitch != surface->w) {
