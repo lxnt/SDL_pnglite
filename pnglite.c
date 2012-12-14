@@ -187,7 +187,7 @@ static int png_read_ihdr(png_t* png)
 	png->filter_method = ihdr[15];
 	png->interlace_method = ihdr[16];
 
-	if(png->color_type == PNG_INDEXED)
+	if(png->depth > 8)
 		return PNG_NOT_SUPPORTED;
 
 	if(png->interlace_method)
