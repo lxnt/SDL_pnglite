@@ -419,7 +419,6 @@ static int png_end_inflate(png_t* png)
 
 	if(inflateEnd(stream) != Z_OK)
 	{
-		printf("ZLIB says: %s\n", stream->msg);
 		return PNG_ZLIB_ERROR;
 	}
 
@@ -443,7 +442,6 @@ static int png_inflate(png_t* png, unsigned char* data, int len)
 
 	if(result != Z_STREAM_END && result != Z_OK)
 	{
-		printf("%s\n", stream->msg);
 		return PNG_ZLIB_ERROR;
 	}
 
@@ -472,7 +470,6 @@ static int png_deflate(png_t* png, unsigned char* outdata, int outlen, int *outw
 
 	if(result != Z_STREAM_END && result != Z_OK)
 	{
-		printf("%s\n", stream->msg);
 		return PNG_ZLIB_ERROR;
 	}
 
