@@ -2,14 +2,8 @@
     For conditions of distribution and use, see copyright notice in pnglite.h
 */
 
-#define USE_ZLIB 1
 
-#if USE_ZLIB
 #include <zlib.h>
-#else
-#include "zlite.h"
-#endif
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -384,30 +378,17 @@ static int png_init_deflate(png_t* png, unsigned char* data, int datalen)
 
 static int png_init_inflate(png_t* png)
 {
-#if USE_ZLIB
 	z_stream *stream;
 	png->zs = png_alloc(sizeof(z_stream));
-#else
-	zl_stream *stream;
-	png->zs = png_alloc(sizeof(zl_stream));
-#endif
 
 	stream = png->zs;
 
 	if(!stream)
 		return PNG_MEMORY_ERROR;
 
-	
-
-#if USE_ZLIB
 	memset(stream, 0, sizeof(z_stream));
 	if(inflateInit(stream) != Z_OK)
 		return PNG_ZLIB_ERROR;
-#else
-	memset(stream, 0, sizeof(zl_stream));
-	if(z_inflateInit(stream) != Z_OK)
-		return PNG_ZLIB_ERROR;
-#endif
 
 	stream->next_out = png->png_data;
 	stream->avail_out = png->png_datalen;
@@ -431,20 +412,12 @@ static int png_end_deflate(png_t* png)
 
 static int png_end_inflate(png_t* png)
 {
-#if USE_ZLIB
 	z_stream *stream = png->zs;
-#else
-	zl_stream *stream = png->zs;
-#endif
 
 	if(!stream)
 		return PNG_MEMORY_ERROR;
 
-#if USE_ZLIB
 	if(inflateEnd(stream) != Z_OK)
-#else
-	if(z_inflateEnd(stream) != Z_OK)
-#endif
 	{
 		printf("ZLIB says: %s\n", stream->msg);
 		return PNG_ZLIB_ERROR;
@@ -458,11 +431,7 @@ static int png_end_inflate(png_t* png)
 static int png_inflate(png_t* png, unsigned char* data, int len)
 {
 	int result;
-#if USE_ZLIB
 	z_stream *stream = png->zs;
-#else
-	zl_stream *stream = png->zs;
-#endif
 
 	if(!stream)
 		return PNG_MEMORY_ERROR;
@@ -470,11 +439,7 @@ static int png_inflate(png_t* png, unsigned char* data, int len)
 	stream->next_in = (unsigned char*)data;
 	stream->avail_in = len;
 	
-#if USE_ZLIB
 	result = inflate(stream, Z_SYNC_FLUSH);
-#else
-	result = z_inflate(stream);
-#endif
 
 	if(result != Z_STREAM_END && result != Z_OK)
 	{
