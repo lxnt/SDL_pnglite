@@ -77,7 +77,6 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
     Sint64 fp_offset = 0;
     SDL_Surface *surface = NULL;
     SDL_Color palette[256];
-    SDL_Palette *pal = NULL;
     int rv;
     png_t png;
     Uint8  *data = NULL;
@@ -307,21 +306,19 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 } else {
                     SDL_memmove(surface->pixels, data, surface->w * surface->h);
                 }
+
                 for (col = 0; col < 256; col++) {
                     palette[col].r = png.palette[3*col + 0];
                     palette[col].g = png.palette[3*col + 1];
                     palette[col].b = png.palette[3*col + 2];
+
+                /*  SDL_SaveBMP_RW actually writes (and reads) out (in) the unused field,
+                    which causes valgrind to yell if it wasn't initialized. */
+                    palette[col].unused = 23;
                 }
-                pal = SDL_AllocPalette(256);
-                if (!pal)
-                    goto error;
 
-                if (SDL_SetPaletteColors(pal, palette, 0, 256))
+                if (SDL_SetPaletteColors(surface->format->palette, palette, 0, 256))
                     goto error;
-
-                if (SDL_SetSurfacePalette(surface, pal))
-                    goto error;
-
             }
             goto done;
 
@@ -342,9 +339,6 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
     surface = NULL;
 
   done:
-    if (pal) {
-        SDL_FreePalette(pal);
-    }
     if (data) {
         SDL_free(data);
     }
