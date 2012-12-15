@@ -136,7 +136,7 @@ static int png_check_png(png_t* png)
         case 16:
             return PNG_NOT_SUPPORTED;
         default:
-            return PNG_CORRUPTED_ERROR;
+            return PNG_CORRUPTED;
     }
 
     switch(png->color_type)
@@ -147,14 +147,14 @@ static int png_check_png(png_t* png)
         case PNG_GREYSCALE_ALPHA:
         case PNG_TRUECOLOR_ALPHA:
             if (png->depth < 8)
-                return PNG_CORRUPTED_ERROR;
+                return PNG_CORRUPTED;
             break;
         case PNG_INDEXED:
             if (png->depth > 8)
-                return PNG_CORRUPTED_ERROR;
+                return PNG_CORRUPTED;
             break;
         default:
-            return PNG_CORRUPTED_ERROR;
+            return PNG_CORRUPTED;
     }
 
     /* bytes per pixel or one */
@@ -587,7 +587,7 @@ static int png_process_chunk(png_t* png)
     if (type == *(unsigned int *) "PLTE")
     {
         if (length % 3)
-            return PNG_CORRUPTED_ERROR;
+            return PNG_CORRUPTED;
 
         memset(png->palette, 255, 1024);
 
@@ -604,7 +604,7 @@ static int png_process_chunk(png_t* png)
         switch(png->color_type) {
             case PNG_INDEXED:
                 if (length > 256)
-                    return PNG_CORRUPTED_ERROR;
+                    return PNG_CORRUPTED;
 
                 if (file_read(png, png->palette + 768, length, 1) != 1)
                     return PNG_EOF_ERROR;
@@ -613,7 +613,7 @@ static int png_process_chunk(png_t* png)
 
             case PNG_TRUECOLOR:
                 if (length != 6)
-                    return PNG_CORRUPTED_ERROR;
+                    return PNG_CORRUPTED;
 
                 if (file_read(png, png->colorkey, length, 1) != 1)
                     return PNG_EOF_ERROR;
@@ -629,7 +629,7 @@ static int png_process_chunk(png_t* png)
 
             case PNG_GREYSCALE:
                 if (length != 2)
-                    return PNG_CORRUPTED_ERROR;
+                    return PNG_CORRUPTED;
 
                 file_read(png, png->colorkey, length, 1);
 
@@ -641,7 +641,7 @@ static int png_process_chunk(png_t* png)
                 return PNG_NO_ERROR;
 
             default:
-                return PNG_CORRUPTED_ERROR;
+                return PNG_CORRUPTED;
         }
     }
     else if(type == *(unsigned int*)"IDAT")	/* if we found an idat, all other idats should be followed with no other chunks in between */
@@ -865,7 +865,7 @@ int png_get_data(png_t* png, unsigned char* data)
 
     if (png->png_data == NULL)
         /* no IDAT chunk in file */
-        return PNG_CORRUPTED_ERROR;
+        return PNG_CORRUPTED;
 
     if (png->depth < 8) {
         packed_data = png_alloc(png->width * png->pitch);
@@ -981,7 +981,7 @@ char* png_error_string(int error)
 		return "The PNG is unsupported by pnglite, too bad for you!";
 	case PNG_WRONG_ARGUMENTS:
 		return "Wrong combination of arguments passed to png_open. You must use either a read_function or supply a file pointer to use.";
-        case PNG_CORRUPTED_ERROR:
+        case PNG_CORRUPTED:
             return "PNG data does not follow the specification or is corrupted.";
 	default:
 		return "Unknown error.";
