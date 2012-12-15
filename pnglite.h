@@ -51,7 +51,8 @@ enum
 	PNG_ZLIB_ERROR			= -7,
 	PNG_UNKNOWN_FILTER		= -8,
 	PNG_NOT_SUPPORTED		= -9,
-	PNG_WRONG_ARGUMENTS		= -10
+	PNG_WRONG_ARGUMENTS		= -10,
+	PNG_CORRUPTED_ERROR		= -11
 };
 
 /*
@@ -65,6 +66,15 @@ enum
 	PNG_INDEXED				= 3,
 	PNG_GREYSCALE_ALPHA		= 4,
 	PNG_TRUECOLOR_ALPHA		= 6
+};
+
+enum
+{
+    PNG_FILTER_NONE     = 0,
+    PNG_FILTER_SUB      = 1,
+    PNG_FILTER_UP       = 2,
+    PNG_FILTER_AVERAGE  = 3,
+    PNG_FILTER_PAETH    = 4
 };
 
 /*
@@ -93,12 +103,15 @@ typedef struct
 	unsigned				height;
 	unsigned char			depth;
 	unsigned char			color_type;
+    unsigned char			palette_present;
     unsigned char			transparency_present;
+    unsigned char			data_present;
 	unsigned char			compression_method;
 	unsigned char			filter_method;
 	unsigned char			interlace_method;
-	unsigned char			bpp;
-}png_t;
+	unsigned char			stride;
+	unsigned    			pitch;
+} png_t;
 
 /*
 	Function: png_init
@@ -210,7 +223,7 @@ char* png_error_string(int error);
 
 int png_get_data(png_t* png, unsigned char* data);
 
-int png_set_data(png_t* png, unsigned width, unsigned height, char depth, int color, unsigned char* data);
+int png_set_data(png_t* png, unsigned width, unsigned height, char depth, int color, int transparency, unsigned char* data);
 
 /*
 	Function: png_close_file

@@ -123,61 +123,111 @@ int png_init(png_alloc_t pngalloc, png_free_t pngfree)
 	return PNG_NO_ERROR;
 }
 
-static int png_get_bpp(png_t* png)
+static int pot_align(int value, int pot)
 {
-	int bpp;
+    return (value + (1<<pot) - 1) & ~((1<<pot) -1);
+}
 
-	switch(png->color_type)
-	{
-	case PNG_GREYSCALE:
-		bpp = 1; break;
-	case PNG_INDEXED:
-		bpp = 1; break;
-	case PNG_GREYSCALE_ALPHA:
-		bpp = 2; break;
-	case PNG_TRUECOLOR:
-		bpp = 3; break;
-	case PNG_TRUECOLOR_ALPHA:
-		bpp = 4; break;
-	default:
-		return PNG_FILE_ERROR;
-	}
+static int png_check_png(png_t* png)
+{
+    int channels[] = { 1, 0, 3, 1, 2, 0, 4 };
 
-	bpp = (bpp * png->depth) >> 3;
+    switch(png->depth)
+    {
+        case 1:
+        case 2:
+        case 4:
+        case 8:
+            break;
+        case 16:
+            return PNG_NOT_SUPPORTED;
+        default:
+            return PNG_CORRUPTED_ERROR;
+    }
 
-	return bpp;
+    switch(png->color_type)
+    {
+        case PNG_GREYSCALE:
+            break;
+        case PNG_TRUECOLOR:
+        case PNG_GREYSCALE_ALPHA:
+        case PNG_TRUECOLOR_ALPHA:
+            if (png->depth < 8)
+                return PNG_CORRUPTED_ERROR;
+            break;
+        case PNG_INDEXED:
+            if (png->depth > 8)
+                return PNG_CORRUPTED_ERROR;
+            break;
+        default:
+            return PNG_CORRUPTED_ERROR;
+    }
+
+    /* bytes per pixel or one */
+    png->stride = pot_align(png->depth * channels[png->color_type], 3) >> 3;
+
+    /* bytes per scanline */
+    png->pitch = pot_align(png->width * png->depth * channels[png->color_type], 3) >> 3;
+
+    if(png->interlace_method)
+        return PNG_NOT_SUPPORTED;
+
+    return PNG_NO_ERROR;
+}
+
+static unsigned png_calc_crc(char *name, unsigned char *chunk, unsigned length)
+{
+    unsigned crc;
+
+    crc = crc32(0L, Z_NULL, 0);
+    crc = crc32(crc, (unsigned char *)name, 4);
+    crc = crc32(crc, chunk, length);
+
+    return crc;
+}
+
+static int png_read_check_crc(png_t *png, char *name, unsigned char *chunk, unsigned length)
+{
+    unsigned crc;
+
+    if (file_read_ul(png, &crc) != PNG_NO_ERROR)
+        return PNG_EOF_ERROR;
+
+    if(crc != png_calc_crc(name, chunk, length))
+        return PNG_CRC_ERROR;
+
+    return PNG_NO_ERROR;
+}
+
+static int png_calc_write_crc(png_t *png, char *name, unsigned char *chunk, unsigned length)
+{
+    unsigned crc;
+
+    crc = png_calc_crc(name, chunk, length);
+
+    if (file_write_ul(png, crc) != PNG_NO_ERROR)
+        return PNG_IO_ERROR;
+
+    return PNG_NO_ERROR;
 }
 
 static int png_read_ihdr(png_t* png)
 {
 	unsigned length;
-#if DO_CRC_CHECKS
-	unsigned orig_crc;
-	unsigned calc_crc;
-#endif
 	unsigned char ihdr[13+4];		 /* length should be 13, make room for type (IHDR) */
 
 	file_read_ul(png, &length);
 
 	if(length != 13)
 	{
-		printf("%d\n", length);
 		return PNG_CRC_ERROR;
 	}
 
 	if(file_read(png, ihdr, 1, 13+4) != 13+4)
 		return PNG_EOF_ERROR;
-#if DO_CRC_CHECKS
-	file_read_ul(png, &orig_crc);
 
-	calc_crc = crc32(0L, 0, 0);
-	calc_crc = crc32(calc_crc, ihdr, 13+4);
-
-	if(orig_crc != calc_crc)
-		return PNG_CRC_ERROR;
-#else
-	file_read_ul(png);
-#endif
+        if (png_read_check_crc(png, "IHDR", ihdr+4, 13) != PNG_NO_ERROR)
+            return PNG_CRC_ERROR;
 
 	png->width = get_ul(ihdr+4);
 	png->height = get_ul(ihdr+8);
@@ -187,20 +237,13 @@ static int png_read_ihdr(png_t* png)
 	png->filter_method = ihdr[15];
 	png->interlace_method = ihdr[16];
 
-	if(png->depth > 8)
-		return PNG_NOT_SUPPORTED;
-
-	if(png->interlace_method)
-		return PNG_NOT_SUPPORTED;
-	
-	return PNG_NO_ERROR;
+	return png_check_png(png);
 }
 
 static int png_write_ihdr(png_t* png)
 {
 	unsigned char ihdr[13+4];
 	unsigned char *p = ihdr;
-	unsigned crc;
 	
 	file_write(png, "\x89\x50\x4E\x47\x0D\x0A\x1A\x0A", 1, 8);
 
@@ -220,12 +263,7 @@ static int png_write_ihdr(png_t* png)
 
 	file_write(png, ihdr, 1, 13+4);
 
-	crc = crc32(0L, 0, 0);
-	crc = crc32(crc, ihdr, 13+4);
-
-	file_write_ul(png, crc);
-
-	return PNG_NO_ERROR;
+    return png_calc_write_crc(png, "IHDR", ihdr + 4, 13);
 }
 
 void png_print_info(png_t* png)
@@ -270,8 +308,6 @@ int png_open_read(png_t* png, png_read_callback_t read_fun, void* user_pointer)
 		return PNG_HEADER_ERROR;
 
 	result = png_read_ihdr(png);
-
-	png->bpp = (unsigned char)png_get_bpp(png);
 
 	return result;
 }
@@ -419,7 +455,7 @@ static int png_end_inflate(png_t* png)
 	return PNG_NO_ERROR;
 }
 
-static int png_inflate(png_t* png, char* data, int len)
+static int png_inflate(png_t* png, unsigned char* data, int len)
 {
 	int result;
 #if USE_ZLIB
@@ -452,7 +488,7 @@ static int png_inflate(png_t* png, char* data, int len)
 	return PNG_NO_ERROR;
 }
 
-static int png_deflate(png_t* png, char* outdata, int outlen, int *outwritten)
+static int png_deflate(png_t* png, unsigned char* outdata, int outlen, int *outwritten)
 {
 	int result;
 
@@ -483,7 +519,7 @@ static int png_write_idats(png_t* png, unsigned char* data)
 	unsigned char *chunk;
 	unsigned long written;
 	unsigned long crc;
-	unsigned size = png->width * png->height * png->bpp + png->height;
+	unsigned size = png->height * (png->pitch + 1);
 	
 	(void)png_init_deflate;
 	(void)png_end_deflate;
@@ -513,15 +549,11 @@ static int png_write_idats(png_t* png, unsigned char* data)
 static int png_read_idat(png_t* png, unsigned firstlen) 
 {
 	unsigned type = 0;
-	char *chunk;
+	unsigned char *chunk;
 	int result;
 	unsigned length = firstlen;
 	unsigned old_len = length;
-
-#if DO_CRC_CHECKS
 	unsigned orig_crc;
-	unsigned calc_crc;
-#endif
 
 	chunk = png_alloc(firstlen); 
 
@@ -543,21 +575,13 @@ static int png_read_idat(png_t* png, unsigned firstlen)
 			return PNG_FILE_ERROR;
 		}
 
-#if DO_CRC_CHECKS
-		calc_crc = crc32(0L, Z_NULL, 0);
-		calc_crc = crc32(calc_crc, (unsigned char*)"IDAT", 4);
-		calc_crc = crc32(calc_crc, (unsigned char*)chunk, length);
-
 		file_read_ul(png, &orig_crc);
 
-		if(orig_crc != calc_crc)
+		if(orig_crc != png_calc_crc("IDAT", chunk, length))
 		{
 			result = PNG_CRC_ERROR;
 			break;
 		}
-#else
-		file_read_ul(png);
-#endif
 
 		result = png_inflate(png, chunk, length);
 
@@ -591,24 +615,29 @@ static int png_read_idat(png_t* png, unsigned firstlen)
 
 static int png_process_chunk(png_t* png)
 {
-	int result = PNG_NO_ERROR;
-	unsigned type;
-	unsigned length;
-    unsigned char *trns;
-    unsigned i;
+    int result = PNG_NO_ERROR;
+    unsigned type;
+    unsigned length;
 
-	file_read_ul(png, &length);
+    if (file_read_ul(png, &length) != PNG_NO_ERROR)
+        return PNG_EOF_ERROR;
 
-	if(file_read(png, &type, 1, 4) != 4)
-		return PNG_FILE_ERROR;
+    if (file_read(png, &type, 4, 1) != 1)
+        return PNG_EOF_ERROR;
 
-    if (type == *(unsigned int*)"PLTE")
+    if (type == *(unsigned int *) "PLTE")
     {
-        /* set up default alpha */
-        for (i = 0; i < 1024; i++)
-            png->palette[i] = (i + 1) % 4 ? 0 : 255;
+        if (length % 3)
+            return PNG_CORRUPTED_ERROR;
 
-        file_read(png, png->palette, 1, length);
+        memset(png->palette, 255, 1024);
+
+        if (file_read(png, png->palette, length, 1) != 1)
+            return PNG_EOF_ERROR;
+
+        if (png_read_check_crc(png, "PLTE", png->palette, length) != PNG_NO_ERROR)
+            return PNG_CRC_ERROR;
+
     }
     else if (type == *(unsigned int*)"tRNS")
     {
@@ -616,53 +645,67 @@ static int png_process_chunk(png_t* png)
         switch(png->color_type) {
             case PNG_INDEXED:
                 if (length > 256)
-                    return PNG_FILE_ERROR;
-                trns = png_alloc(length);
-                if (!trns)
-                    return PNG_MEMORY_ERROR;
-                file_read(png, trns, length, 1);
-                for (i = 0; i < length/3; i++)
-                    png->palette[4*i+3] = trns[i];
-                png_free(trns);
-                break;
+                    return PNG_CORRUPTED_ERROR;
+
+                if (file_read(png, png->palette + 768, length, 1) != 1)
+                    return PNG_EOF_ERROR;
+
+                return png_read_check_crc(png, "tRNS", png->palette + 768, length);
+
             case PNG_TRUECOLOR:
-                if (length > 6)
-                    return PNG_FILE_ERROR;
-                file_read(png, png->colorkey, 6, 1);
+                if (length != 6)
+                    return PNG_CORRUPTED_ERROR;
+
+                if (file_read(png, png->colorkey, length, 1) != 1)
+                    return PNG_EOF_ERROR;
+
+                if (png_read_check_crc(png, "tRNS", png->colorkey, length) != PNG_NO_ERROR)
+                    return PNG_CRC_ERROR;
+
                 png->colorkey[0] = png->colorkey[1];
                 png->colorkey[1] = png->colorkey[3];
                 png->colorkey[2] = png->colorkey[5];
-                break;
+
+                return PNG_NO_ERROR;
+
             case PNG_GREYSCALE:
-                if (length > 2)
-                    return PNG_FILE_ERROR;
-                file_read(png, png->colorkey, 2, 1);
+                if (length != 2)
+                    return PNG_CORRUPTED_ERROR;
+
+                file_read(png, png->colorkey, length, 1);
+
+                if (png_read_check_crc(png, "tRNS", png->colorkey, length) != PNG_NO_ERROR)
+                    return PNG_CRC_ERROR;
+
                 png->colorkey[0] = png->colorkey[1];
-                break;
+
+                return PNG_NO_ERROR;
+
             default:
-                return PNG_FILE_ERROR;
+                return PNG_CORRUPTED_ERROR;
         }
     }
-	else if(type == *(unsigned int*)"IDAT")	/* if we found an idat, all other idats should be followed with no other chunks in between */
-	{
-		png->png_datalen = png->width * png->height * png->bpp + png->height;
-		png->png_data = png_alloc(png->png_datalen);
-		
-		if(!png->png_data)
-			return PNG_MEMORY_ERROR;
+    else if(type == *(unsigned int*)"IDAT")	/* if we found an idat, all other idats should be followed with no other chunks in between */
+    {
+        png->png_datalen = png->height * (png->pitch + 1);
+        png->png_data = png_alloc(png->png_datalen);
 
-		return png_read_idat(png, length);
-	}
-	else if(type == *(unsigned int*)"IEND")
-	{
-		return PNG_DONE;
-	}
-	else
-	{
-		file_read(png, 0, 1, length + 4);		/* unknown chunk */
-	}
+        if(!png->png_data)
+            return PNG_MEMORY_ERROR;
 
-	return result;
+        return png_read_idat(png, length);
+    }
+    else if(type == *(unsigned int*)"IEND")
+    {
+        return PNG_DONE;
+    }
+    else
+    {
+        if (file_read(png, 0, length + 4, 1) != 1) /* unknown chunk */
+            return PNG_EOF_ERROR;
+    }
+
+    return result;
 }
 
 static int png_write_plte(png_t *png)
@@ -670,24 +713,18 @@ static int png_write_plte(png_t *png)
     unsigned char plte[4 + 4 + 768 + 4];
     int i;
     const int length = 768;
-    unsigned long crc;
 
-    set_ul(plte, length);
-    memmove(plte + 4, "PLTE", 4);
-    for(i = 0 ; i < 256; i++)
-    {
+    memcpy(plte + 4, "PLTE", 4);
+    for(i = 0 ; i < 256; i++) {
         plte[8 + 3*i + 0] = png->palette[4*i + 0];
         plte[8 + 3*i + 1] = png->palette[4*i + 1];
         plte[8 + 3*i + 2] = png->palette[4*i + 2];
     }
-    crc = crc32(0L, Z_NULL, 0);
-    crc = crc32(0L, plte + 4, length);
-    set_ul(plte + 8 + length, crc);
 
-    if (1 !=  file_write(png, plte, 12 + length, 1))
+    if (file_write(png, plte, length + 8, 1) != 1)
         return PNG_IO_ERROR;
 
-    return PNG_NO_ERROR;
+    return png_calc_write_crc(png, "PLTE", plte + 4, length);
 }
 
 static int png_write_trns(png_t *png)
@@ -695,9 +732,9 @@ static int png_write_trns(png_t *png)
     unsigned char trns[4 + 4 + 256 + 4];
     int i;
     int length;
-    unsigned long crc;
 
-    switch (png->color_type) {
+    switch (png->color_type)
+    {
         case PNG_INDEXED:
             length = 256;
             for(i = 0 ; i < 256; i++)
@@ -724,67 +761,15 @@ static int png_write_trns(png_t *png)
             return PNG_NOT_SUPPORTED;
     }
     memmove(trns + 4, "tRNS", 4);
-    crc = crc32(0L, Z_NULL, 0);
-    crc = crc32(0L, trns + 4, length + 4);
-    set_ul(trns + 8 + length, crc);
     set_ul(trns, length);
 
-    if (1 !=  file_write(png, trns, 12 + length, 1))
+    if (file_write(png, trns, length + 8, 1) != 1)
         return PNG_IO_ERROR;
 
-    return PNG_NO_ERROR;
+    return png_calc_write_crc(png, "tRNS", trns + 4, length);
 }
 
-static void png_filter_sub(int stride, unsigned char* in, unsigned char* out, int len)
-{
-	int i;
-	unsigned char a = 0;
-
-	for(i = 0; i < len; i++)
-	{
-		if(i >= stride)
-			a = out[i - stride];
-		
-		out[i] = in[i] + a;
-	}
-}
-
-static void png_filter_up(int stride, unsigned char* in, unsigned char* out, unsigned char* prev_line, int len)
-{
-	int i;
-
-	if(prev_line) 
-    { 
-        for(i = 0; i < len; i++) 
-            out[i] = in[i] + prev_line[i]; 
-    } 
-    else 
-        memcpy(out, in, len);
-}
-
-static void png_filter_average(int stride, unsigned char* in, unsigned char* out, unsigned char* prev_line, int len)
-{
-	int i;
-	unsigned char a = 0;
-	unsigned char b = 0;
-	unsigned int sum = 0;
-
-	for(i = 0; i < len; i++)
-	{
-		if(prev_line)
-			b = prev_line[i];
-
-		if(i >= stride)
-			a = out[i - stride];
-
-		sum = a;
-		sum += b;
-
-		out[i] = (char)(in[i] + sum/2);
-	}
-}
-
-static unsigned char png_paeth(unsigned char a, unsigned char b, unsigned char c)
+static unsigned char png_paeth_predictor(unsigned char a, unsigned char b, unsigned char c)
 {
 	int p = (int)a + b - c;
 	int pa = abs(p - a);
@@ -803,108 +788,75 @@ static unsigned char png_paeth(unsigned char a, unsigned char b, unsigned char c
 	return (char)pr;
 }
 
-static void png_filter_paeth(int stride, unsigned char* in, unsigned char* out, unsigned char* prev_line, int len)
-{
-	int i;
-	unsigned char a;
-	unsigned char b;
-	unsigned char c;
-
-	for(i = 0; i < len; i++)
-	{
-		if(prev_line && i >= stride)
-		{
-			a = out[i - stride];
-			b = prev_line[i];
-			c = prev_line[i - stride];
-		}
-		else
-		{
-			if(prev_line)
-				b = prev_line[i];
-			else
-				b = 0;
-	
-			if(i >= stride)
-				a = out[i - stride];
-			else
-				a = 0;
-
-			c = 0;
-		}
-
-		out[i] = in[i] + png_paeth(a, b, c);
-	}
-}
-
 static int png_filter(png_t* png, unsigned char* data)
 {
 	return PNG_NO_ERROR;
 }
 
+
 static int png_unfilter(png_t* png, unsigned char* data)
 {
-	unsigned i;
-	unsigned pos = 0;
-	unsigned outpos = 0;
-	unsigned char *filtered = png->png_data;
+    unsigned i, p, t;
+    unsigned char a, b, c;
+    unsigned char *filtered;
+    unsigned char *reconstructed;
+    unsigned char *up_reconstructed;
+    unsigned char filter_type;
+    for(i = 0; i < png->height ; i++)
+    {
+        filtered = png->png_data + (png->pitch + 1) * i;
+        reconstructed = data + png->pitch * i;
+        up_reconstructed = i > 0 ? data + png->pitch * (i - 1) : 0;
+        filter_type = *filtered++;
 
-	int stride = png->bpp;
+        switch(filter_type)
+        {
+            case PNG_FILTER_NONE:
+                memcpy(reconstructed, filtered, png->pitch);
+                break;
 
-	while(pos < png->png_datalen)
-	{
-		unsigned char filter = filtered[pos];
+            case PNG_FILTER_SUB:
+                memcpy(reconstructed, filtered, png->stride);
+                for (p = png->stride; p < png->pitch ; p++)
+                    reconstructed[p] = filtered[p] + reconstructed[p - png->stride];
+                break;
 
-		pos++;
+            case PNG_FILTER_UP:
+                if (up_reconstructed)
+                    for (p = 0; p < png->pitch ; p++)
+                        reconstructed[p] = filtered[p] + up_reconstructed[p];
+                else
+                    memcpy(reconstructed, filtered, png->pitch);
+                break;
 
-		if(png->depth == 16)
-		{
-			for(i = 0; i < png->width * stride; i+=2)
-			{
-				*(short*)(filtered+pos+i) = (filtered[pos+i] << 8) | filtered[pos+i+1];
-			}
-		}
+            case PNG_FILTER_AVERAGE:
+                for (p = 0; p < png->pitch ; p++) {
+                    b = up_reconstructed ? up_reconstructed[p] : 0;
+                    a = p >= png->stride ? reconstructed[p - png->stride] : 0;
+                    t = a + b;
+                    reconstructed[p] = filtered[p] + t/2;
+                }
+                break;
 
-		switch(filter)
-		{
-		case 0: /* none */
-			memcpy(data+outpos, filtered+pos, png->width * stride);
-			break;
-		case 1: /* sub */
-			png_filter_sub(stride, filtered+pos, data+outpos, png->width * stride);
-			break;
-		case 2: /* up */
-			if(outpos)
-				png_filter_up(stride, filtered+pos, data+outpos, data + outpos - (png->width*stride), png->width*stride);
-			else
-				png_filter_up(stride, filtered+pos, data+outpos, 0, png->width*stride);
-			break;
-		case 3: /* average */
-			if(outpos)
-				png_filter_average(stride, filtered+pos, data+outpos, data + outpos - (png->width*stride), png->width*stride);
-			else
-				png_filter_average(stride, filtered+pos, data+outpos, 0, png->width*stride);
-			break;
-		case 4: /* paeth */
-			if(outpos)
-				png_filter_paeth(stride, filtered+pos, data+outpos, data + outpos - (png->width*stride), png->width*stride);
-			else
-				png_filter_paeth(stride, filtered+pos, data+outpos, 0, png->width*stride);
-			break;
-		default:
-			return PNG_UNKNOWN_FILTER;
-		}
+            case PNG_FILTER_PAETH:
+                for (p = 0; p < png->pitch ; p++) {
+                    c = (up_reconstructed && (p >= png->stride)) ? up_reconstructed[p - png->stride] : 0;
+                    b = up_reconstructed ? up_reconstructed[p] : 0;
+                    a = p >= png->stride ? reconstructed[p - png->stride] : 0;
+                    reconstructed[p] = filtered[p] + png_paeth_predictor(a, b, c);
+                }
+                break;
 
-		outpos += png->width * stride;
-		pos += png->width * stride;
-	}
-
-	return PNG_NO_ERROR;
+            default:
+                return PNG_UNKNOWN_FILTER;
+        }
+    }
+    return PNG_NO_ERROR;
 }
 
 int png_get_data(png_t* png, unsigned char* data)
 {
-	int result = PNG_NO_ERROR;
+    int result = PNG_NO_ERROR;
     unsigned char *unpacked_pixel;
     unsigned char *packed_pixel;
     unsigned char *packed_data;
@@ -912,96 +864,112 @@ int png_get_data(png_t* png, unsigned char* data)
     png->transparency_present = 0;
     png->png_data = NULL;
 
-	while(result == PNG_NO_ERROR)
-	{
-		result = png_process_chunk(png);
-	}
+    while(result == PNG_NO_ERROR)
+        result = png_process_chunk(png);
 
-	if(result != PNG_DONE)
-	{
-            if (png->png_data)
-		png_free(png->png_data);
-            return result;
-	}
+    if(result != PNG_DONE) {
+        if (png->png_data)
+            png_free(png->png_data);
+        return result;
+    }
 
-	result = png_unfilter(png, data);
+    if (png->png_data == NULL)
+        /* no IDAT chunk in file */
+        return PNG_CORRUPTED_ERROR;
 
-	png_free(png->png_data); 
-        if (png->depth < 8) {
-            packed_data = png_alloc(png->width * png->height);
-            if (!packed_data)
-                return PNG_MEMORY_ERROR;
+    if (png->depth < 8) {
+        packed_data = png_alloc(png->width * png->pitch);
 
-            memmove(packed_data, data, png->width * png->height);
-            unpacked_pixel = data;
-            packed_pixel = packed_data;
-            
-            while (data - unpacked_pixel < png->width * png->height) {
-                switch (png->depth) {
-                    case 1:
-                        *unpacked_pixel++ = (*packed_pixel & 0x80) ? 1 : 0;
-                        *unpacked_pixel++ = (*packed_pixel & 0x40) ? 1 : 0;
-                        *unpacked_pixel++ = (*packed_pixel & 0x20) ? 1 : 0;
-                        *unpacked_pixel++ = (*packed_pixel & 0x10) ? 1 : 0;
-                        *unpacked_pixel++ = (*packed_pixel & 0x08) ? 1 : 0;
-                        *unpacked_pixel++ = (*packed_pixel & 0x04) ? 1 : 0;
-                        *unpacked_pixel++ = (*packed_pixel & 0x02) ? 1 : 0;
-                        *unpacked_pixel++ = (*packed_pixel & 0x01) ? 1 : 0;
-                    case 2:
-                        *unpacked_pixel++ = (*packed_pixel & 0xC0) >> 6;
-                        *unpacked_pixel++ = (*packed_pixel & 0x30) >> 4;
-                        *unpacked_pixel++ = (*packed_pixel & 0x0C) >> 2;
-                        *unpacked_pixel++ = (*packed_pixel & 0x03);
-                        break;
-                    case 4:
-                        *unpacked_pixel++ = (*packed_pixel & 0xF0) >> 4;
-                        *unpacked_pixel++ = (*packed_pixel & 0x0F);
-                        break;
-                    default:
-                        return PNG_HEADER_ERROR;
-                }
-                packed_pixel++;
-            }
+        if (!packed_data)
+            return PNG_MEMORY_ERROR;
+
+        result = png_unfilter(png, packed_data);
+
+        if (result != PNG_NO_ERROR) {
             png_free(packed_data);
+            png_free(png->png_data);
+            return result;
         }
-        
-	return result;
+
+        unpacked_pixel = data;
+        packed_pixel = packed_data;
+
+        while (unpacked_pixel - data < png->width * png->height) {
+            switch (png->depth) {
+                case 1:
+                    *unpacked_pixel++ = (*packed_pixel & 0x80) ? 1 : 0;
+                    *unpacked_pixel++ = (*packed_pixel & 0x40) ? 1 : 0;
+                    *unpacked_pixel++ = (*packed_pixel & 0x20) ? 1 : 0;
+                    *unpacked_pixel++ = (*packed_pixel & 0x10) ? 1 : 0;
+                    *unpacked_pixel++ = (*packed_pixel & 0x08) ? 1 : 0;
+                    *unpacked_pixel++ = (*packed_pixel & 0x04) ? 1 : 0;
+                    *unpacked_pixel++ = (*packed_pixel & 0x02) ? 1 : 0;
+                    *unpacked_pixel++ = (*packed_pixel & 0x01) ? 1 : 0;
+                    break;
+                case 2:
+                    *unpacked_pixel++ = (*packed_pixel & 0xC0) >> 6;
+                    *unpacked_pixel++ = (*packed_pixel & 0x30) >> 4;
+                    *unpacked_pixel++ = (*packed_pixel & 0x0C) >> 2;
+                    *unpacked_pixel++ = (*packed_pixel & 0x03);
+                    break;
+                case 4:
+                    *unpacked_pixel++ = (*packed_pixel & 0xF0) >> 4;
+                    *unpacked_pixel++ = (*packed_pixel & 0x0F);
+                    break;
+                default:
+                    /* can't be, we caught this in read_ihdr */
+                    return PNG_CORRUPTED_ERROR;
+            }
+            packed_pixel++;
+        }
+        png_free(packed_data);
+    } else {
+        result = png_unfilter(png, data);
+    }
+    png_free(png->png_data);
+    return result;
 }
 
-int png_set_data(png_t* png, unsigned width, unsigned height, char depth, int color, unsigned char* data)
+int png_set_data(png_t* png, unsigned width, unsigned height, char depth, int color, int transparency, unsigned char* data)
 {
-	unsigned i;
-        int err;
-	unsigned char *filtered;
-	png->width = width;
-	png->height = height;
-	png->depth = depth;
-	png->color_type = color;
-	png->bpp = png_get_bpp(png);
+    unsigned i;
+    int err;
+    unsigned char *filtered;
 
-	filtered = png_alloc(width * height * png->bpp + height);
+    png->width = width;
+    png->height = height;
+    png->depth = depth;
+    png->color_type = color;
+    png->filter_method = 0;
+    png->interlace_method = 0;
 
-	for(i = 0; i < png->height; i++)
-	{
-		filtered[i*png->width*png->bpp+i] = 0;
-		memcpy(&filtered[i*png->width*png->bpp+i+1], data + i * png->width*png->bpp, png->width*png->bpp);
-	}
+    if (png_check_png(png) || (png->depth != 8))
+        return PNG_NOT_SUPPORTED;
 
-	png_filter(png, filtered);
-	png_write_ihdr(png);
+    filtered = png_alloc((png->pitch + 1) * height);
+    if (!filtered)
+        return PNG_MEMORY_ERROR;
+
+    for(i = 0; i < png->height; i++)
+    {
+        filtered[i * (png->pitch + 1)] = 0;
+        memcpy(filtered + i*(png->pitch + 1) + 1, data + i*png->pitch, png->pitch);
+    }
+    png_filter(png, filtered);
+    png_write_ihdr(png);
 
     if (png->color_type == PNG_INDEXED)
         if ((err = png_write_plte(png)))
             return err;
 
-    if (png->transparency_present)
+    if (transparency)
         if ((err = png_write_trns(png)))
             return err;
 
-	png_write_idats(png, filtered);
-	
-	png_free(filtered);
-	return PNG_NO_ERROR;
+    png_write_idats(png, filtered);
+    png_free(filtered);
+
+    return PNG_NO_ERROR;
 }
 
 
@@ -1033,6 +1001,8 @@ char* png_error_string(int error)
 		return "The PNG is unsupported by pnglite, too bad for you!";
 	case PNG_WRONG_ARGUMENTS:
 		return "Wrong combination of arguments passed to png_open. You must use either a read_function or supply a file pointer to use.";
+        case PNG_CORRUPTED_ERROR:
+            return "PNG data does not follow the specification or is corrupted.";
 	default:
 		return "Unknown error.";
 	};
