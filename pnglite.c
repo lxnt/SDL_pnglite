@@ -515,7 +515,6 @@ static int png_read_idat(png_t* png, unsigned firstlen)
 	int result;
 	unsigned length = firstlen;
 	unsigned old_len = length;
-	unsigned orig_crc;
 
 	chunk = png_alloc(firstlen); 
 
@@ -537,9 +536,7 @@ static int png_read_idat(png_t* png, unsigned firstlen)
 			return PNG_FILE_ERROR;
 		}
 
-		file_read_ul(png, &orig_crc);
-
-		if(orig_crc != png_calc_crc("IDAT", chunk, length))
+		if (!png_read_check_crc(png, "IDAT", chunk, length))
 		{
 			result = PNG_CRC_ERROR;
 			break;
