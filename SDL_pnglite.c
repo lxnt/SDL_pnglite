@@ -56,6 +56,21 @@ rwops_write_wrapper(void* buf, size_t size, size_t num, void* baton)
     return 0;
 }
 
+static unsigned char
+bit_replicate(unsigned char val, unsigned bits)
+{
+    switch (bits) {
+        case 1:
+            return val*255;
+        case 2:
+            return val|(val<<2)|(val<<4)|(val<<6);
+        case 4:
+            return val|(val<<4);
+        default:
+            return val;
+    }
+}
+
 SDL_Surface *
 SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
 {
@@ -74,7 +89,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
     int row;
     int col;
     Uint8 index;
-    Uint8 gray_level;
+    Uint32 gray_level;
     Uint8 alpha;
     Uint64 pixel; /* what if we get 3-gigapixel PNG ? */
     Uint8 *pitched_row;
@@ -190,7 +205,9 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
             for(pixel = 0 ; pixel < png.width * png.height ; pixel++) {
                 row = pixel / png.width;
                 col = pixel % png.width;
-                gray_level = *(data + pixel) << (8 - png.depth);
+
+                gray_level = bit_replicate(*(data + pixel), png.depth);
+
                 pixel_start = (Uint8*)(surface->pixels) +
                                         row*surface->pitch + col*3;
 
@@ -199,8 +216,11 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 *pixel_start++ = gray_level;
             }
             if (png.transparency_present) {
-                color = SDL_MapRGB(surface->format, png.colorkey[0],
-                                        png.colorkey[0], png.colorkey[0]);
+                gray_level = bit_replicate(png.colorkey[0], png.depth);
+
+                color = SDL_MapRGB(surface->format, gray_level, gray_level,
+                                    gray_level);
+
                 SDL_SetColorKey(surface, SDL_TRUE, color);
             }
             goto done;
@@ -213,7 +233,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
             if (!surface) {
                 goto error;
             }
-            /*  grayscale+alpha is always 2 or 4 bytes per pixel,
+            /*  grayscale+alpha is always 2 bytes per pixel,
                 so png.pitch is the right value */
             data = SDL_malloc(png.width * png.pitch);
             if (!data) {
