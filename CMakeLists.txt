@@ -14,7 +14,13 @@ add_library(SDL_pnglite STATIC SDL_pnglite.c pnglite.c)
 add_executable(test-save test-save.c )
 target_link_libraries(test-save  ${PKG_SDL2_LIBRARIES} SDL_pnglite z)
 
+add_executable(test-save-paletted-bmp test-save-paletted-bmp.c )
+target_link_libraries(test-save-paletted-bmp  ${PKG_SDL2_LIBRARIES})
+
 add_executable(test-load test-load.c )
 target_link_libraries(test-load  ${PKG_SDL2_LIBRARIES} SDL_pnglite z)
+
+add_executable(test-lib-load test-lib-load.c pnglite.c )
+target_link_libraries(test-lib-load z)
 
 
