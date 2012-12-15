@@ -323,6 +323,9 @@ printf("surf: w=%d pitch=%d\n", surface->w, surface->pitch);
     surface = NULL;
 
   done:
+    if (pal) {
+        SDL_FreePalette(pal);
+    }
     if (data) {
         SDL_free(data);
     }
