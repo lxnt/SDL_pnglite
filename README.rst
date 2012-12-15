@@ -30,12 +30,13 @@ PNG color types and transparency:
 
 - PNG_INDEXED, no transparency:
     - png_get_data() returns I bytestream; required buffer size is width*height
-    - png_t::palette contains 256-entry RGBX palette, unused entries are set to #000F
+    - png_t::palette contains 256-entry RGB, unused entries are set to #FFF
     - png_t::transparency_present is 0
 
 - PNG_INDEXED, with transparency:
     - png_get_data() returns I bytestream; required buffer size is width*height
-    - png_t::palette contains 256-entry RGBA palette, unused entries are set to #000F
+    - png_t::palette contains 256-entry RGB palette followed by 256 bytes of alpha channel,
+      unused entries are set to #FFF and FF.
     - png_t::transparency_present is 1
 
 - PNG_GREYSCALE, no transparency:
