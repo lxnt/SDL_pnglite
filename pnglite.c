@@ -536,7 +536,7 @@ static int png_read_idat(png_t* png, unsigned firstlen)
 			return PNG_FILE_ERROR;
 		}
 
-		if (!png_read_check_crc(png, "IDAT", chunk, length))
+		if (png_read_check_crc(png, "IDAT", chunk, length))
 		{
 			result = PNG_CRC_ERROR;
 			break;
