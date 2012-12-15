@@ -854,12 +854,43 @@ static int png_unfilter(png_t* png, unsigned char* data)
     return PNG_NO_ERROR;
 }
 
+static void png_unpack_byte(unsigned char *dst, unsigned char *src, int depth) {
+    switch (depth) {
+        case 1:
+            *dst++ = (*src & 0x80) ? 1 : 0;
+            *dst++ = (*src & 0x40) ? 1 : 0;
+            *dst++ = (*src & 0x20) ? 1 : 0;
+            *dst++ = (*src & 0x10) ? 1 : 0;
+            *dst++ = (*src & 0x08) ? 1 : 0;
+            *dst++ = (*src & 0x04) ? 1 : 0;
+            *dst++ = (*src & 0x02) ? 1 : 0;
+            *dst++ = (*src & 0x01) ? 1 : 0;
+            break;
+        case 2:
+            *dst++ = (*src & 0xC0) >> 6;
+            *dst++ = (*src & 0x30) >> 4;
+            *dst++ = (*src & 0x0C) >> 2;
+            *dst++ = (*src & 0x03);
+            break;
+        case 4:
+            *dst++ = (*src & 0xF0) >> 4;
+            *dst++ = (*src & 0x0F);
+            break;
+        default:
+            /* can't be, we caught this in read_ihdr */
+            break;
+    }
+}
+
 int png_get_data(png_t* png, unsigned char* data)
 {
     int result = PNG_NO_ERROR;
-    unsigned char *unpacked_pixel;
-    unsigned char *packed_pixel;
+    unsigned char *packed_pixels;
     unsigned char *packed_data;
+    unsigned char *unpacked_row;
+    unsigned row, offset;
+    unsigned char tail[8];
+    const unsigned pipeby = 8 / png->depth; /* pixels per byte */
 
     png->transparency_present = 0;
     png->png_data = NULL;
@@ -891,37 +922,27 @@ int png_get_data(png_t* png, unsigned char* data)
             return result;
         }
 
-        unpacked_pixel = data;
-        packed_pixel = packed_data;
+        for (row = 0; row < png->height; row++) {
+            packed_pixels = packed_data + row * png->pitch;
+            unpacked_row = data + png->width*row;
 
-        while (unpacked_pixel - data < png->width * png->height) {
-            switch (png->depth) {
-                case 1:
-                    *unpacked_pixel++ = (*packed_pixel & 0x80) ? 1 : 0;
-                    *unpacked_pixel++ = (*packed_pixel & 0x40) ? 1 : 0;
-                    *unpacked_pixel++ = (*packed_pixel & 0x20) ? 1 : 0;
-                    *unpacked_pixel++ = (*packed_pixel & 0x10) ? 1 : 0;
-                    *unpacked_pixel++ = (*packed_pixel & 0x08) ? 1 : 0;
-                    *unpacked_pixel++ = (*packed_pixel & 0x04) ? 1 : 0;
-                    *unpacked_pixel++ = (*packed_pixel & 0x02) ? 1 : 0;
-                    *unpacked_pixel++ = (*packed_pixel & 0x01) ? 1 : 0;
-                    break;
-                case 2:
-                    *unpacked_pixel++ = (*packed_pixel & 0xC0) >> 6;
-                    *unpacked_pixel++ = (*packed_pixel & 0x30) >> 4;
-                    *unpacked_pixel++ = (*packed_pixel & 0x0C) >> 2;
-                    *unpacked_pixel++ = (*packed_pixel & 0x03);
-                    break;
-                case 4:
-                    *unpacked_pixel++ = (*packed_pixel & 0xF0) >> 4;
-                    *unpacked_pixel++ = (*packed_pixel & 0x0F);
-                    break;
-                default:
-                    /* can't be, we caught this in read_ihdr */
-                    return PNG_CORRUPTED_ERROR;
+            if (png->width % pipeby) {
+                for (offset = 0; offset + pipeby < png->width; offset += pipeby)
+                    png_unpack_byte(unpacked_row + offset, packed_pixels++,
+                                                                     png->depth);
+
+                /*  here *packed_pixels is the last byte of data for the row,
+                    unpacked_row + offset points to the last unpacked pixels
+                    in the row. There are png->width % pipeby of them. */
+                png_unpack_byte(tail, packed_pixels, png->depth);
+                memcpy(unpacked_row + offset, tail, png->width % pipeby);
+            } else {
+                for (offset = 0; offset < png->width; offset += pipeby)
+                    png_unpack_byte(unpacked_row + offset, packed_pixels++,
+                                                                     png->depth);
             }
-            packed_pixel++;
         }
+
         png_free(packed_data);
     } else {
         result = png_unfilter(png, data);
