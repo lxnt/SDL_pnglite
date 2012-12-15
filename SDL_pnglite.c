@@ -279,7 +279,6 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 }
 
                 if (surface->pitch != surface->w) {
-printf("surf: w=%d pitch=%d\n", surface->w, surface->pitch);
                     for (row = png.height - 1; row >= 0; row --) {
                         pitched_row = (Uint8 *) surface->pixels + row * surface->pitch;
                         packed_row  = data + row * png.width;
