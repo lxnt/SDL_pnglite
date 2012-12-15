@@ -1,7 +1,7 @@
 /*  pnglite.c - pnglite library
     For conditions of distribution and use, see copyright notice in pnglite.h
 */
-#define DO_CRC_CHECKS 1
+
 #define USE_ZLIB 1
 
 #if USE_ZLIB
