@@ -36,7 +36,7 @@ rwops_read_wrapper(void* buf, size_t size, size_t num, void* baton)
             SDL_Error(SDL_EFSEEK);
             return 0;
         }
-        return size * num;
+        return num;
     }
 
     return SDL_RWread(rwops, buf, size, num);
@@ -61,6 +61,8 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
 {
     Sint64 fp_offset = 0;
     SDL_Surface *surface = NULL;
+    SDL_Color palette[256];
+    SDL_Palette *pal = NULL;
     int rv;
     png_t png;
     Uint8  *data = NULL;
@@ -78,7 +80,6 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
     Uint8 *pitched_row;
     Uint8 *packed_row;
     Uint8 *pixel_start;
-    Uint32 row_bytes;
     Uint32 color;
 
     if (src == NULL) {
@@ -98,9 +99,9 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
         goto error;
     }
 
-    if (png.bpp > 4) {
+    if (png.depth > 8) {
         /* support loading 16bpc by losing lsbs ? */
-        SDL_SetError("pnglite: %d bytes per pixel not supported", png.bpp);
+        SDL_SetError("pnglite: %d bits per channel not supported", png.depth);
         goto error;
     }
 
@@ -154,11 +155,10 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 SDL_SetError("png_get_data(): %s", png_error_string(rv));
                 goto error;
             }
-            row_bytes = surface->w * png.bpp;
             for (row = png.height - 1; row >= 0; row --) {
                 pitched_row = (Uint8 *) surface->pixels + row * surface->pitch;
-                packed_row  = (Uint8 *) surface->pixels + row * row_bytes;
-                SDL_memmove(pitched_row, packed_row, row_bytes);
+                packed_row  = (Uint8 *) surface->pixels + row * png.pitch;
+                SDL_memmove(pitched_row, packed_row, png.pitch);
             }
             if (png.transparency_present) {
                 color = SDL_MapRGB(surface->format, png.colorkey[0],
@@ -175,7 +175,9 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
             if (!surface) {
                 goto error;
             }
-            data = SDL_malloc(png.width * png.height * png.bpp);
+            /*  grayscale can be of any depth, and anything below 8
+                gets expanded to 8, so use stride. */
+            data = SDL_malloc(png.width * png.height * png.stride);
             if (!data) {
                 SDL_OutOfMemory();
                 goto error;
@@ -211,7 +213,9 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
             if (!surface) {
                 goto error;
             }
-            data = SDL_malloc(png.width * png.height * png.bpp);
+            /*  grayscale+alpha is always 2 or 4 bytes per pixel,
+                so png.pitch is the right value */
+            data = SDL_malloc(png.width * png.pitch);
             if (!data) {
                 SDL_OutOfMemory();
                 goto error;
@@ -237,6 +241,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
             goto done;
 
         case PNG_INDEXED:
+            /*  indexed always ends up as 8 bits per pixel. */
             data = SDL_malloc(png.width * png.height);
             if (!data) {
                 SDL_OutOfMemory();
@@ -261,10 +266,10 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                     index = *(data + pixel);
                     pixel_start = (Uint8*)(surface->pixels) +
                                             row*surface->pitch + col*4;
-                    *pixel_start++ = png.palette[4*index + 3];
-                    *pixel_start++ = png.palette[4*index + 2];
-                    *pixel_start++ = png.palette[4*index + 1];
-                    *pixel_start++ = png.palette[4*index + 0];
+                    *pixel_start++ = png.palette[768 + index]; /* A */
+                    *pixel_start++ = png.palette[3*index + 2]; /* B */
+                    *pixel_start++ = png.palette[3*index + 1]; /* G */
+                    *pixel_start++ = png.palette[3*index + 0]; /* R */
                 }
             } else {
                 surface = SDL_CreateRGBSurface(0, png.width, png.height, 8,
@@ -272,14 +277,32 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 if (!surface) {
                     goto error;
                 }
+
                 if (surface->pitch != surface->w) {
-                    row_bytes = surface->w;
+printf("surf: w=%d pitch=%d\n", surface->w, surface->pitch);
                     for (row = png.height - 1; row >= 0; row --) {
                         pitched_row = (Uint8 *) surface->pixels + row * surface->pitch;
-                        packed_row  = (Uint8 *) surface->pixels + row * row_bytes;
-                        SDL_memmove(pitched_row, packed_row, row_bytes);
+                        packed_row  = data + row * png.width;
+                        SDL_memmove(pitched_row, packed_row, png.width);
                     }
+                } else {
+                    SDL_memmove(surface->pixels, data, surface->w * surface->h);
                 }
+                for (col = 0; col < 256; col++) {
+                    palette[col].r = png.palette[3*col + 0];
+                    palette[col].g = png.palette[3*col + 1];
+                    palette[col].b = png.palette[3*col + 2];
+                }
+                pal = SDL_AllocPalette(256);
+                if (!pal)
+                    goto error;
+
+                if (SDL_SetPaletteColors(pal, palette, 0, 256))
+                    goto error;
+
+                if (SDL_SetSurfacePalette(surface, pal))
+                    goto error;
+
             }
             goto done;
 
@@ -374,7 +397,7 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
         goto error;
     }
 
-    rv = png_set_data(&png, tmp->w, tmp->h, 8, png_color_type, data);
+    rv = png_set_data(&png, tmp->w, tmp->h, 8, png_color_type, 0, data);
     if (rv != PNG_NO_ERROR) {
         SDL_SetError("png_set_data(): %s", png_error_string(rv));
         goto error;
