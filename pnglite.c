@@ -868,7 +868,7 @@ int png_get_data(png_t* png, unsigned char* data)
         return PNG_CORRUPTED;
 
     if (png->depth < 8) {
-        packed_data = png_alloc(png->width * png->pitch);
+        packed_data = png_alloc(png->height * png->pitch);
 
         if (!packed_data)
             return PNG_MEMORY_ERROR;
