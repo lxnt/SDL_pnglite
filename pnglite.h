@@ -34,11 +34,11 @@
 extern "C" {
 #endif
 
-/*
-    Enumerations for pnglite.
-    Negative numbers are error codes and 0 and up are okay responses.
-*/
-
+/*  Enumerations for pnglite. */
+    
+    
+/*  Return values. 
+    Negative numbers are error codes and 0 and up are okay responses. */
 enum
 {
     PNG_DONE                = 1,
@@ -53,13 +53,10 @@ enum
     PNG_UNKNOWN_FILTER      = -8,
     PNG_NOT_SUPPORTED       = -9,
     PNG_WRONG_ARGUMENTS     = -10,
-    PNG_CORRUPTED       = -11
+    PNG_CORRUPTED           = -11
 };
 
-/*
-    The five different kinds of color storage in PNG files.
-*/
-
+/* The five different kinds of color storage in PNG files. */
 enum {
     PNG_GREYSCALE           = 0,
     PNG_TRUECOLOR           = 2,
@@ -68,18 +65,16 @@ enum {
     PNG_TRUECOLOR_ALPHA     = 6
 };
 
+/* PNG filter types */
 enum {
-    PNG_FILTER_NONE     = 0,
-    PNG_FILTER_SUB      = 1,
-    PNG_FILTER_UP       = 2,
-    PNG_FILTER_AVERAGE  = 3,
-    PNG_FILTER_PAETH    = 4
+    PNG_FILTER_NONE         = 0,
+    PNG_FILTER_SUB          = 1,
+    PNG_FILTER_UP           = 2,
+    PNG_FILTER_AVERAGE      = 3,
+    PNG_FILTER_PAETH        = 4
 };
 
-/*
-    Typedefs for callbacks.
-*/
-
+/* Typedefs for callbacks. */
 typedef unsigned (*png_write_callback_t)(void* input, size_t size, size_t numel, void* user_pointer);
 typedef unsigned (*png_read_callback_t)(void* output, size_t size, size_t numel, void* user_pointer);
 typedef void (*png_free_t)(void* p);
@@ -109,20 +104,21 @@ typedef struct {
     unsigned                pitch;
 } png_t;
 
-/*
-    Function: png_init
-
-    This function initializes pnglite. The parameters can be used to set your own memory allocation routines following these formats:
-
-    > void* (*custom_alloc)(size_t s)
-    > void (*custom_free)(void* p)
-    Parameters:
-        pngalloc - Pointer to custom allocation routine. If 0 is passed, malloc from libc will be used.
-        pngfree - Pointer to custom free routine. If 0 is passed, free from libc will be used.
-
-    Returns:
-        Always returns PNG_NO_ERROR.
-*/
+/** 
+ *  This function initializes pnglite. The parameters can be used to set your 
+ *  own memory allocation routines following these formats:
+ *
+ *    > void* (*custom_alloc)(size_t s)
+ *    > void (*custom_free)(void* p)
+ *   Parameters:
+ *       pngalloc - Pointer to custom allocation routine. 
+ *                  If 0 is passed, malloc from libc will be used.
+ *       pngfree -  Pointer to custom free routine. If 0 is passed, 
+ *                  free from libc will be used.
+ *
+ *   Returns:
+ *       Always returns PNG_NO_ERROR.
+ */
 
 int png_init(png_alloc_t pngalloc, png_free_t pngfree);
 
