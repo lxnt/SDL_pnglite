@@ -12,7 +12,7 @@
 static png_alloc_t png_alloc;
 static png_free_t png_free;
 
-static size_t 
+static size_t
 file_read(png_t* png, void* out, size_t size, size_t numel)
 {
     size_t result;
@@ -29,7 +29,7 @@ file_read(png_t* png, void* out, size_t size, size_t numel)
     return result;
 }
 
-static size_t 
+static size_t
 file_write(png_t* png, void* p, size_t size, size_t numel)
 {
     size_t result;
@@ -43,7 +43,7 @@ file_write(png_t* png, void* p, size_t size, size_t numel)
     return result;
 }
 
-static int 
+static int
 file_read_ul(png_t* png, unsigned *out)
 {
     unsigned char buf[4];
@@ -56,7 +56,7 @@ file_read_ul(png_t* png, unsigned *out)
     return PNG_NO_ERROR;
 }
 
-static int 
+static int
 file_write_ul(png_t* png, unsigned in)
 {
     unsigned char buf[4];
@@ -73,7 +73,7 @@ file_write_ul(png_t* png, unsigned in)
 }
 
 
-static unsigned 
+static unsigned
 get_ul(unsigned char* buf)
 {
     unsigned result;
@@ -86,7 +86,7 @@ get_ul(unsigned char* buf)
     return result;
 }
 
-static unsigned 
+static unsigned
 set_ul(unsigned char* buf, unsigned in)
 {
     buf[0] = (in>>24) & 0xff;
@@ -97,7 +97,7 @@ set_ul(unsigned char* buf, unsigned in)
     return PNG_NO_ERROR;
 }
 
-int 
+int
 png_init(png_alloc_t pngalloc, png_free_t pngfree)
 {
     if(pngalloc)
@@ -113,13 +113,13 @@ png_init(png_alloc_t pngalloc, png_free_t pngfree)
     return PNG_NO_ERROR;
 }
 
-static int 
+static int
 pot_align(int value, int pot)
 {
     return (value + (1<<pot) - 1) & ~((1<<pot) -1);
 }
 
-static int 
+static int
 png_check_png(png_t* png)
 {
     int channels[] = { 1, 0, 3, 1, 2, 0, 4 };
@@ -165,7 +165,7 @@ png_check_png(png_t* png)
     return PNG_NO_ERROR;
 }
 
-static unsigned 
+static unsigned
 png_calc_crc(char *name, unsigned char *chunk, unsigned length)
 {
     unsigned crc;
@@ -177,7 +177,7 @@ png_calc_crc(char *name, unsigned char *chunk, unsigned length)
     return crc;
 }
 
-static int 
+static int
 png_read_check_crc(png_t *png, char *name, unsigned char *chunk, unsigned length)
 {
     unsigned crc;
@@ -191,7 +191,7 @@ png_read_check_crc(png_t *png, char *name, unsigned char *chunk, unsigned length
     return PNG_NO_ERROR;
 }
 
-static int 
+static int
 png_calc_write_crc(png_t *png, char *name, unsigned char *chunk, unsigned length)
 {
     unsigned crc;
@@ -204,7 +204,7 @@ png_calc_write_crc(png_t *png, char *name, unsigned char *chunk, unsigned length
     return PNG_NO_ERROR;
 }
 
-static int 
+static int
 png_read_ihdr(png_t* png)
 {
     unsigned length;
@@ -232,7 +232,7 @@ png_read_ihdr(png_t* png)
     return png_check_png(png);
 }
 
-static int 
+static int
 png_write_ihdr(png_t* png)
 {
     unsigned char ihdr[13 + 4];
@@ -261,7 +261,7 @@ png_write_ihdr(png_t* png)
     return png_calc_write_crc(png, "IHDR", ihdr + 4, 13);
 }
 
-void 
+void
 png_print_info(png_t* png)
 {
     printf("PNG INFO:\n");
@@ -297,7 +297,7 @@ png_print_info(png_t* png)
     printf("\tpitch:\t\t%d\n",     png->pitch);
 }
 
-int 
+int
 png_open_read(png_t* png, png_read_callback_t read_fun, void* user_pointer)
 {
     char header[8];
@@ -321,7 +321,7 @@ png_open_read(png_t* png, png_read_callback_t read_fun, void* user_pointer)
     return result;
 }
 
-int 
+int
 png_open_write(png_t* png, png_write_callback_t write_fun, void* user_pointer)
 {
     png->write_fun = write_fun;
@@ -334,13 +334,13 @@ png_open_write(png_t* png, png_write_callback_t write_fun, void* user_pointer)
     return PNG_NO_ERROR;
 }
 
-int 
+int
 png_open(png_t* png, png_read_callback_t read_fun, void* user_pointer)
 {
     return png_open_read(png, read_fun, user_pointer);
 }
 
-int 
+int
 png_open_file_read(png_t *png, const char* filename)
 {
     FILE* fp = fopen(filename, "rb");
@@ -351,7 +351,7 @@ png_open_file_read(png_t *png, const char* filename)
     return png_open_read(png, 0, fp);
 }
 
-int 
+int
 png_open_file_write(png_t *png, const char* filename)
 {
     FILE* fp = fopen(filename, "wb");
@@ -362,13 +362,13 @@ png_open_file_write(png_t *png, const char* filename)
     return png_open_write(png, 0, fp);
 }
 
-int 
+int
 png_open_file(png_t *png, const char* filename)
 {
     return png_open_file_read(png, filename);
 }
 
-int 
+int
 png_close_file(png_t* png)
 {
     fclose(png->user_pointer);
@@ -376,7 +376,7 @@ png_close_file(png_t* png)
     return PNG_NO_ERROR;
 }
 
-static int 
+static int
 png_init_deflate(png_t* png, unsigned char* data, int datalen)
 {
     z_stream *stream;
@@ -398,7 +398,7 @@ png_init_deflate(png_t* png, unsigned char* data, int datalen)
     return PNG_NO_ERROR;
 }
 
-static int 
+static int
 png_init_inflate(png_t* png)
 {
     z_stream *stream;
@@ -419,7 +419,7 @@ png_init_inflate(png_t* png)
     return PNG_NO_ERROR;
 }
 
-static int 
+static int
 png_end_deflate(png_t* png)
 {
     z_stream *stream = png->zs;
@@ -434,7 +434,7 @@ png_end_deflate(png_t* png)
     return PNG_NO_ERROR;
 }
 
-static int 
+static int
 png_end_inflate(png_t* png)
 {
     z_stream *stream = png->zs;
@@ -450,7 +450,7 @@ png_end_inflate(png_t* png)
     return PNG_NO_ERROR;
 }
 
-static int 
+static int
 png_inflate(png_t* png, unsigned char* data, int len)
 {
     int result;
@@ -473,7 +473,7 @@ png_inflate(png_t* png, unsigned char* data, int len)
     return PNG_NO_ERROR;
 }
 
-static int 
+static int
 png_deflate(png_t* png, unsigned char* outdata, int outlen, int *outwritten)
 {
     int result;
@@ -497,7 +497,7 @@ png_deflate(png_t* png, unsigned char* outdata, int outlen, int *outwritten)
     return result;
 }
 
-static int 
+static int
 png_write_idats(png_t* png, unsigned char* data)
 {
     unsigned char *chunk;
@@ -530,7 +530,7 @@ png_write_idats(png_t* png, unsigned char* data)
     return PNG_NO_ERROR;
 }
 
-static int 
+static int
 png_read_idat(png_t* png, unsigned firstlen)
 {
     unsigned type = 0;
@@ -589,7 +589,7 @@ png_read_idat(png_t* png, unsigned firstlen)
     return result;
 }
 
-static int 
+static int
 png_process_chunk(png_t* png)
 {
     int result = PNG_NO_ERROR;
@@ -658,8 +658,8 @@ png_process_chunk(png_t* png)
         default:
             return PNG_CORRUPTED;
         }
-    } else if (type == *(unsigned int*)"IDAT") { 
-        /*  if we found an idat, all other idats should be followed 
+    } else if (type == *(unsigned int*)"IDAT") {
+        /*  if we found an idat, all other idats should be followed
             with no other chunks in between */
         png->png_datalen = png->height * (png->pitch + 1);
         png->png_data = png_alloc(png->png_datalen);
@@ -678,7 +678,7 @@ png_process_chunk(png_t* png)
     return result;
 }
 
-static int 
+static int
 png_write_plte(png_t *png)
 {
     unsigned char plte[4 + 4 + 768 + 4];
@@ -739,7 +739,7 @@ static int png_write_trns(png_t *png)
     return png_calc_write_crc(png, "tRNS", trns + 4, length);
 }
 
-static unsigned char 
+static unsigned char
 png_paeth_predictor(unsigned char a, unsigned char b, unsigned char c)
 {
     int p = (int)a + b - c;
@@ -758,7 +758,7 @@ png_paeth_predictor(unsigned char a, unsigned char b, unsigned char c)
     return (char)pr;
 }
 
-static int 
+static int
 png_filter(png_t* png, unsigned char* data)
 {
     return PNG_NO_ERROR;
@@ -786,7 +786,7 @@ static int png_unfilter(png_t* png, unsigned char* data)
         case PNG_FILTER_SUB:
             memcpy(reconstructed, filtered, png->stride);
             for (p = png->stride; p < png->pitch ; p++)
-                reconstructed[p] = filtered[p] 
+                reconstructed[p] = filtered[p]
                                         + reconstructed[p - png->stride];
             break;
 
@@ -809,7 +809,7 @@ static int png_unfilter(png_t* png, unsigned char* data)
 
         case PNG_FILTER_PAETH:
             for (p = 0; p < png->pitch ; p++) {
-                c = (up_reconstructed && (p >= png->stride)) ? 
+                c = (up_reconstructed && (p >= png->stride)) ?
                                     up_reconstructed[p - png->stride] : 0;
                 b = up_reconstructed ? up_reconstructed[p] : 0;
                 a = p >= png->stride ? reconstructed[p - png->stride] : 0;
@@ -824,7 +824,7 @@ static int png_unfilter(png_t* png, unsigned char* data)
     return PNG_NO_ERROR;
 }
 
-static void 
+static void
 png_unpack_byte(unsigned char *dst, unsigned char *src, int depth)
 {
     switch (depth) {
@@ -854,7 +854,7 @@ png_unpack_byte(unsigned char *dst, unsigned char *src, int depth)
     }
 }
 
-int 
+int
 png_get_data(png_t* png, unsigned char* data)
 {
     int result = PNG_NO_ERROR;
@@ -924,8 +924,8 @@ png_print_info(png);
     return result;
 }
 
-int 
-png_set_data(png_t* png, unsigned width, unsigned height, char depth, 
+int
+png_set_data(png_t* png, unsigned width, unsigned height, char depth,
                         int color, int transparency, unsigned char* data)
 {
     unsigned i;
@@ -949,7 +949,7 @@ png_set_data(png_t* png, unsigned width, unsigned height, char depth,
 
     for(i = 0; i < png->height; i++) {
         filtered[i * (png->pitch + 1)] = 0;
-        memcpy(filtered + i*(png->pitch + 1) + 1, 
+        memcpy(filtered + i*(png->pitch + 1) + 1,
                         data + i*png->pitch, png->pitch);
     }
     png_filter(png, filtered);

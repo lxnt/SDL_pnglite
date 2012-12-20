@@ -22,7 +22,7 @@
 
 /**
  *  \file SDL_pnglite.h
- *  
+ *
  *  Header file for pnglite library wrapper.
  */
 #ifndef _SDL_pnglite_h
@@ -38,11 +38,11 @@ extern "C" {
 
 /**
  *  Load a surface from a seekable SDL data stream (memory or file).
- *  
+ *
  *  If \c freesrc is non-zero, the stream will be closed after being read.
- *  
+ *
  *  The new surface should be freed with SDL_FreeSurface().
- *  
+ *
  *  \return the new surface, or NULL if there was an error.
  */
 extern DECLSPEC SDL_Surface *SDLCALL SDL_LoadPNG_RW(SDL_RWops * src,
@@ -50,7 +50,7 @@ extern DECLSPEC SDL_Surface *SDLCALL SDL_LoadPNG_RW(SDL_RWops * src,
 
 /**
  *  Load a surface from a file.
- *  
+ *
  *  Convenience macro.
  */
 #define SDL_LoadPNG(file) \
@@ -58,17 +58,17 @@ extern DECLSPEC SDL_Surface *SDLCALL SDL_LoadPNG_RW(SDL_RWops * src,
 
 /**
  *  Save a surface to a seekable SDL data stream (memory or file).
- *  
+ *
  *  If \c freedst is non-zero, the stream will be closed after being written.
- *  
+ *
  *  \return 0 if successful or -1 if there was an error.
  */
 extern DECLSPEC int SDLCALL SDL_SavePNG_RW
     (SDL_Surface * surface, SDL_RWops * dst, int freedst);
 
-/** 
+/**
  *  Save a surface to a file.
- *  
+ *
  *  Convenience macro.
  */
 #define SDL_SavePNG(surface, file) \

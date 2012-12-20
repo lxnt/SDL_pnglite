@@ -35,9 +35,9 @@ extern "C" {
 #endif
 
 /*  Enumerations for pnglite. */
-    
-    
-/*  Return values. 
+
+
+/*  Return values.
     Negative numbers are error codes and 0 and up are okay responses. */
 enum
 {
@@ -104,16 +104,16 @@ typedef struct {
     unsigned                pitch;
 } png_t;
 
-/** 
- *  This function initializes pnglite. The parameters can be used to set your 
+/**
+ *  This function initializes pnglite. The parameters can be used to set your
  *  own memory allocation routines following these formats:
  *
  *    > void* (*custom_alloc)(size_t s)
  *    > void (*custom_free)(void* p)
  *   Parameters:
- *       pngalloc - Pointer to custom allocation routine. 
+ *       pngalloc - Pointer to custom allocation routine.
  *                  If 0 is passed, malloc from libc will be used.
- *       pngfree -  Pointer to custom free routine. If 0 is passed, 
+ *       pngfree -  Pointer to custom free routine. If 0 is passed,
  *                  free from libc will be used.
  *
  *   Returns:
