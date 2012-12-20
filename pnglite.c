@@ -880,7 +880,7 @@ png_get_data(png_t* png, unsigned char* data)
     if (png->png_data == NULL)
         /* no IDAT chunk in file */
         return PNG_CORRUPTED;
-png_print_info(png);
+
     if (png->depth < 8) {
         packed_data = png_alloc(png->height * png->pitch);
 
