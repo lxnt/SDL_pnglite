@@ -207,10 +207,12 @@ png_calc_write_crc(png_t *png, char *name, unsigned char *chunk, unsigned length
 static int
 png_read_ihdr(png_t* png)
 {
+    int rv;
     unsigned length;
     unsigned char ihdr[13 + 4]; /* length should be 13, make room for type (IHDR) */
 
-    file_read_ul(png, &length);
+    if ((rv = file_read_ul(png, &length)) != PNG_NO_ERROR)
+        return rv;
 
     if(length != 13)
         return PNG_CRC_ERROR;
