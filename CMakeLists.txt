@@ -23,6 +23,10 @@ if (ARCH64)
     endif()
 endif()
 
+# mingw32 hack for the zlib
+include_directories("${CMAKE_INSTALL_PREFIX}/include")
+
+
 include(FindPkgConfig)
 pkg_check_modules(PKG_SDL2 REQUIRED sdl2)
 link_directories(${PKG_SDL2_LIBRARY_DIRS})
@@ -33,15 +37,14 @@ install(TARGETS SDL_pnglite ARCHIVE DESTINATION lib)
 install(FILES  SDL_pnglite.h DESTINATION include/SDL2)
 
 add_executable(test-save test-save.c )
-target_link_libraries(test-save  ${PKG_SDL2_LIBRARIES} SDL_pnglite z)
+target_link_libraries(test-save  SDL_pnglite ${PKG_SDL2_LIBRARIES}  z)
 
 add_executable(test-save-paletted-bmp test-save-paletted-bmp.c )
-target_link_libraries(test-save-paletted-bmp  ${PKG_SDL2_LIBRARIES})
+target_link_libraries(test-save-paletted-bmp ${PKG_SDL2_LIBRARIES})
 
 add_executable(test-load test-load.c )
-target_link_libraries(test-load  ${PKG_SDL2_LIBRARIES} SDL_pnglite z)
+target_link_libraries(test-load  SDL_pnglite ${PKG_SDL2_LIBRARIES} z)
 
 add_executable(test-lib-load test-lib-load.c pnglite.c )
 target_link_libraries(test-lib-load z)
-
 

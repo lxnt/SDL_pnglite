@@ -3,10 +3,11 @@
 */
 
 
-#include <zlib.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "zlib.h"
 #include "pnglite.h"
 
 static png_alloc_t png_alloc;
