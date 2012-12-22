@@ -1,9 +1,8 @@
 cmake_minimum_required(VERSION 2.8)
 project(sdl_pnglite)
 
-set(LIB32_LINK_DIR "/home/lxnt/00DFGL/lib32" CACHE PATH "what it says")
-
 set(M32 "-m32 -march=i686")
+set(ENV{PKG_CONFIG_PATH} "${CMAKE_INSTALL_PREFIX}/lib/pkgconfig/")
 
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
   set(ARCH64 TRUE)
@@ -11,26 +10,16 @@ else()
   set(ARCH64 FALSE)
 endif()
 
-set(CMAKE_C_FLAGS "-Wall -Wextra -pedantic -ggdb3")
-set(CMAKE_C_FLAGS_DEBUG "-Wall -Wextra -pedantic -ggdb3")
-
+set(CMAKE_C_FLAGS "-Wall -Wextra -pedantic")
+set(CMAKE_C_FLAGS_DEBUG "-ggdb3")
+set(CMAKE_C_FLAGS_RELEASE "-O3 -ggdb3")
 
 if (ARCH64)
-    if(NOT CONFIGURING_RENDUMPER)
-        option(DF_32BIT_COMPAT "Compile for linking with Dwarf Fortress" ON)
-    else()
-        set(DF_32BIT_COMPAT TRUE)
-    endif()
-    if(DF_32BIT_COMPAT)
-        set(ENV{PKG_CONFIG_PATH} "/home/lxnt/00DFGL/prefix32/lib/pkgconfig/")
-        set(CMAKE_INSTALL_PREFIX "/home/lxnt/00DFGL/prefix32" CACHE PATH "install prefix" FORCE)
-        set(CMAKE_C_COMPILER gcc-4.5)
+    option(BUILD_32BIT "Compile 32-bit version" ON)
+    if(BUILD_32BIT)
         set(CMAKE_LIBRARY_PATH /usr/lib32 /usr/lib/i386-linux-gnu)
         set(CMAKE_C_FLAGS "${M32} ${CMAKE_C_FLAGS}")
         set(CMAKE_C_FLAGS_DEBUG "${M32} ${CMAKE_C_FLAGS}")
-    else()
-        set(CMAKE_INSTALL_PREFIX "/home/lxnt/00DFGL/prefix64" CACHE PATH "install prefix" FORCE)
-        set(ENV{PKG_CONFIG_PATH} "/home/lxnt/00DFGL/prefix64/lib/pkgconfig/")
     endif()
 endif()
 
