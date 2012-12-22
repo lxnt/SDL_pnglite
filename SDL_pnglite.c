@@ -352,7 +352,7 @@ int
 SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
 {
     SDL_Surface *tmp = NULL;
-    SDL_PixelFormat *format;
+    SDL_PixelFormat *format = NULL;
     png_t png;
     Uint8 *data = NULL;
     Uint8 png_color_type;
