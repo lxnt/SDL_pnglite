@@ -543,6 +543,9 @@ png_read_idat(png_t* png, unsigned firstlen)
 
     chunk = png_alloc(firstlen);
 
+    if (!chunk)
+        return PNG_MEMORY_ERROR;
+
     result = png_init_inflate(png);
 
     if(result != PNG_NO_ERROR) {
@@ -567,7 +570,8 @@ png_read_idat(png_t* png, unsigned firstlen)
 
         if(result != PNG_NO_ERROR) break;
 
-        file_read_ul(png, &length);
+        if ((result = file_read_ul(png, &length)) != PNG_NO_ERROR)
+            break;
 
         if(length > old_len) {
             png_free(chunk);
