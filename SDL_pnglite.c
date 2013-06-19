@@ -314,7 +314,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
 
                 /*  SDL_SaveBMP_RW actually writes (and reads) out (in) the unused field,
                     which causes valgrind to yell if it wasn't initialized. */
-                    palette[col].unused = 23;
+                    palette[col].a = 23;
                 }
 
                 if (SDL_SetPaletteColors(surface->format->palette, palette, 0, 256))

@@ -22,7 +22,7 @@ int main(int argc, char *argv[]) {
             palette[col].r = col;
             palette[col].g = col;
             palette[col].b = col;
-            palette[col].unused = col;
+            palette[col].a = col;
             printf("%d ", col);
         }
         puts("\n");
