@@ -311,10 +311,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                     palette[col].r = png.palette[3*col + 0];
                     palette[col].g = png.palette[3*col + 1];
                     palette[col].b = png.palette[3*col + 2];
-
-                /*  SDL_SaveBMP_RW actually writes (and reads) out (in) the unused field,
-                    which causes valgrind to yell if it wasn't initialized. */
-                    palette[col].a = 23;
+                    palette[col].a = 255;
                 }
 
                 if (SDL_SetPaletteColors(surface->format->palette, palette, 0, 256))
