@@ -545,25 +545,20 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
             ptr += 1;
         }
 
+    memset(png.palette, 255, 1024);
     if (0 == SDL_GetColorKey(src, &colorkey)) {
         if (((int)(colorkey + 1)) > src->format->palette->ncolors) {
             /* well, duh. shouldn't happen though. */
             goto error;
         }
-        png.colorkey[0] = src->format->palette->colors[colorkey].r;
-        png.colorkey[1] = 0;
-        png.colorkey[2] = src->format->palette->colors[colorkey].g;
-        png.colorkey[3] = 0;
-        png.colorkey[4] = src->format->palette->colors[colorkey].b;
-        png.colorkey[5] = 0;
+        png.palette[3*256 +i] = 0;
         transparency_present = 1;
     }
 
     for (i = 0; i < src->format->palette->ncolors ; i++) {
-        png.palette[4*i] = src->format->palette->colors[i].r;
-        png.palette[4*i+1] = src->format->palette->colors[i].g;
-        png.palette[4*i+2] = src->format->palette->colors[i].b;
-        png.palette[4*i+3] = src->format->palette->colors[i].a;
+        png.palette[3*i] = src->format->palette->colors[i].r;
+        png.palette[3*i+1] = src->format->palette->colors[i].g;
+        png.palette[3*i+2] = src->format->palette->colors[i].b;
     }
 
     /* write out and be done */
