@@ -71,6 +71,25 @@ bit_replicate(unsigned char val, unsigned bits)
     }
 }
 
+static int
+find_colorkey(png_t *p) {
+    int alpha_zero_index = -1;
+    int alpha_one_count = 0;
+    int i;
+
+    if ((p->color_type == PNG_INDEXED) && (p->transparency_present)) {
+        for (i = 768; i < 1024; i++) {
+            if (p->palette[i] == 255)
+                alpha_one_count += 1;
+            else if (p->palette[i] == 0)
+                alpha_zero_index = i;
+        }
+        if (alpha_one_count == 254)
+            return alpha_zero_index; /* the only transparent */
+    }
+    return -1;
+}
+
 SDL_Surface *
 SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
 {
@@ -95,6 +114,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
     Uint8 *packed_row;
     Uint8 *pixel_start;
     Uint32 color;
+    int colorkey; /* -1 = none */
 
     if (src == NULL) {
         goto error;
@@ -271,7 +291,8 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 SDL_SetError("png_get_data(): %s", png_error_string(rv));
                 goto error;
             }
-            if (png.transparency_present) {
+            colorkey = find_colorkey(&png);
+            if (colorkey == -1) {
                 SDL_PixelFormatEnumToMasks(SDL_PIXELFORMAT_RGBA8888,
                                 &bpp, &Rmask, &Gmask, &Bmask, &Amask);
                 surface = SDL_CreateRGBSurface(0, png.width, png.height, 32,
@@ -315,6 +336,9 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 }
 
                 if (SDL_SetPaletteColors(surface->format->palette, palette, 0, 256))
+                    goto error;
+
+                if (SDL_SetColorKey(surface, 1, colorkey))
                     goto error;
             }
             goto done;
