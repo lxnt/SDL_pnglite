@@ -106,7 +106,10 @@ SDL_LoadPNG() / SDL_LoadPNG_RW():
 
 - Attempts to load a png from given filename / RWops object.
 - Indexed-color images without transparency are returned as paletted surfaces.
-- Those with transparency and also truecolor+alpha and grayscale+alpha are returned as RGBA32.
+- Indexed-color images with transparency are returned as paletted surfaces with colorkey 
+  if and only if the transparency chunks marks exacly one color as fully transparent, and
+  all others as fully opaque. Otherwise they are returned as RGBA32.
+- Truecolor+alpha and grayscale+alpha are returned as RGBA32.
 - Truecolor and grayscale images are returned as RGB24.
 - Truecolor+transparency and grayscale+transparency ones are returned as RGB24 + colorkey.
 
