@@ -575,14 +575,14 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
             /* well, duh. shouldn't happen though. */
             goto error;
         }
-        png.palette[3*256 +i] = 0;
+        png.palette[4*i + 3] = 0;
         transparency_present = 1;
     }
 
     for (i = 0; i < src->format->palette->ncolors ; i++) {
-        png.palette[3*i] = src->format->palette->colors[i].r;
-        png.palette[3*i+1] = src->format->palette->colors[i].g;
-        png.palette[3*i+2] = src->format->palette->colors[i].b;
+        png.palette[4*i + 0] = src->format->palette->colors[i].r;
+        png.palette[4*i + 1] = src->format->palette->colors[i].g;
+        png.palette[4*i + 2] = src->format->palette->colors[i].b;
     }
 
     /* write out and be done */
