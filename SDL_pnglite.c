@@ -1,7 +1,7 @@
 /*
   SDL_pnglite: An example PNG loader/writer for adding to SDL
 
-  Copyright (C) 2012 Alexander Sabourenkov <screwdriver@lxnt.info>
+  Copyright (C) 2012-2016 Alexander Sabourenkov <llxxnntt@gmail.com>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -346,7 +346,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
 }
 
 int
-SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
+SDL_SavePNG32_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
 {
     SDL_Surface *tmp = NULL;
     SDL_PixelFormat *format = NULL;
@@ -403,6 +403,7 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
                     (Uint8 *) tmp->pixels + pitched_row_bytes *i,
                     pitched_row_bytes);
     }
+
     /* write out and be done */
     rv = png_open_write(&png, rwops_write_wrapper, dst);
     if (rv != PNG_NO_ERROR) {
@@ -431,4 +432,161 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
     }
 
     return SDL_strlen(SDL_GetError()) ? -1 : 0;
+}
+
+int
+SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
+{
+    Uint8 *data, *ptr, *pixels;
+    int i, j, rv;
+    png_t png;
+    int transparency_present = 0;
+    Uint32 colorkey;
+
+    /* this is perfectly safe to call multiple times
+       as long as parameters don't change */
+    png_init(SDL_malloc, SDL_free);
+
+    switch (src->format->format) {
+        case SDL_PIXELFORMAT_INDEX1LSB:
+        case SDL_PIXELFORMAT_INDEX1MSB:
+        case SDL_PIXELFORMAT_INDEX4LSB:
+        case SDL_PIXELFORMAT_INDEX4MSB:
+        case SDL_PIXELFORMAT_INDEX8:
+            break;
+        default:
+            return SDL_SavePNG32_RW(src, dst, freedst);
+    }
+
+    data = SDL_malloc(src->w * src->h);
+    ptr = data;
+    pixels = src->pixels;
+    for (j = 0; j < src->h ; j++)
+        for(i = 0; i < src->w; i++) {
+            switch (src->format->format) {
+                case SDL_PIXELFORMAT_INDEX1LSB:
+                    switch (i%8) {
+                        case 0:
+                            *ptr = *(pixels + src->pitch*j + i/8) & 0x01;
+                            break;
+                        case 1:
+                            *ptr = (*(pixels + src->pitch*j + i/8) & 0x02 ) >> 1;
+                            break;
+                        case 2:
+                            *ptr = (*(pixels + src->pitch*j + i/8) & 0x04 ) >> 2;
+                            break;
+                        case 3:
+                            *ptr = (*(pixels + src->pitch*j + i/8) & 0x08 ) >> 3;
+                            break;
+                        case 4:
+                            *ptr = (*(pixels + src->pitch*j + i/8) & 0x10 ) >> 4;
+                            break;
+                        case 5:
+                            *ptr = (*(pixels + src->pitch*j + i/8) & 0x20 ) >> 5;
+                            break;
+                        case 6:
+                            *ptr = (*(pixels + src->pitch*j + i/8) & 0x40 ) >> 6;
+                            break;
+                        case 7:
+                            *ptr = (*(pixels + src->pitch*j + i/8) & 0x80 ) >> 7;
+                            break;
+                    }
+                case SDL_PIXELFORMAT_INDEX1MSB:
+                    switch (i%8) {
+                        case 0:
+                            *ptr = (*(pixels + src->pitch*j + i/8) & 0x80 ) >> 7;
+                            break;
+                        case 1:
+                            *ptr = (*(pixels + src->pitch*j + i/8) & 0x40 ) >> 6;
+                            break;
+                        case 2:
+                            *ptr = (*(pixels + src->pitch*j + i/8) & 0x20 ) >> 5;
+                            break;
+                        case 3:
+                            *ptr = (*(pixels + src->pitch*j + i/8) & 0x10 ) >> 4;
+                            break;
+                        case 4:
+                            *ptr = (*(pixels + src->pitch*j + i/8) & 0x08 ) >> 3;
+                            break;
+                        case 5:
+                            *ptr = (*(pixels + src->pitch*j + i/8) & 0x04 ) >> 2;
+                            break;
+                        case 6:
+                            *ptr = (*(pixels + src->pitch*j + i/8) & 0x02 ) >> 1;
+                            break;
+                        case 7:
+                            *ptr = *(pixels + src->pitch*j + i/8) & 0x01;
+                            break;
+                    }
+                case SDL_PIXELFORMAT_INDEX4LSB:
+                    switch (i%2) {
+                        case 0:
+                           *ptr = *(pixels + src->pitch*j + i/8) & 0x0f;
+                            break;
+                        case 1:
+                           *ptr = (*(pixels + src->pitch*j + i/8) & 0xf0) >> 4;
+                            break;
+                    }
+                case SDL_PIXELFORMAT_INDEX4MSB:
+                    switch (i%2) {
+                        case 0:
+                           *ptr = (*(pixels + src->pitch*j + i/8) & 0xf0) >> 4;
+                            break;
+                        case 1:
+                           *ptr = *(pixels + src->pitch*j + i/8) & 0x0f;
+                            break;
+                    }
+                case SDL_PIXELFORMAT_INDEX8:
+                    *ptr = pixels[i + j*src->pitch];
+                    break;
+                default: /* should not ever happen here */
+                    break;
+            }
+            ptr += 1;
+        }
+
+    if (0 == SDL_GetColorKey(src, &colorkey)) {
+        if (((int)(colorkey + 1)) > src->format->palette->ncolors) {
+            /* well, duh. shouldn't happen though. */
+            goto error;
+        }
+        png.colorkey[0] = src->format->palette->colors[colorkey].r;
+        png.colorkey[1] = 0;
+        png.colorkey[2] = src->format->palette->colors[colorkey].g;
+        png.colorkey[3] = 0;
+        png.colorkey[4] = src->format->palette->colors[colorkey].b;
+        png.colorkey[5] = 0;
+        transparency_present = 1;
+    }
+
+    for (i = 0; i < src->format->palette->ncolors ; i++) {
+        png.palette[4*i] = src->format->palette->colors[i].r;
+        png.palette[4*i+1] = src->format->palette->colors[i].g;
+        png.palette[4*i+2] = src->format->palette->colors[i].b;
+        png.palette[4*i+3] = src->format->palette->colors[i].a;
+    }
+
+    /* write out and be done */
+    rv = png_open_write(&png, rwops_write_wrapper, dst);
+    if (rv != PNG_NO_ERROR) {
+        SDL_SetError("png_open_write(): %s", png_error_string(rv));
+        goto error;
+    }
+
+    rv = png_set_data(&png, src->w, src->h, 8, PNG_INDEXED, transparency_present, data);
+    if (rv != PNG_NO_ERROR) {
+        SDL_SetError("png_set_data(): %s", png_error_string(rv));
+        goto error;
+    }
+
+  error:
+    if (data) {
+        SDL_free(data);
+    }
+    if (freedst && dst) {
+        SDL_RWclose(dst);
+    }
+
+    return SDL_strlen(SDL_GetError()) ? -1 : 0;
+
 }
