@@ -117,8 +117,8 @@ SDL_SavePNG() / SDL_SavePNG_RW():
 =================================
 
 - Attemps to save given surface as png image to given filename / RWops object.
-- Surfaces are converted to and saved as RGB/RGBA ones.
 - Paletted surfaces with or without colorkey are saved as indexed color.
+- All other surfaces are converted to and saved as 8bpc RGB/RGBA ones.
 
 Not implemented yet:
 
