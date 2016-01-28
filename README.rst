@@ -110,8 +110,9 @@ SDL_LoadPNG() / SDL_LoadPNG_RW():
   if and only if the transparency chunks marks exacly one color as fully transparent, and
   all others as fully opaque. Otherwise they are returned as RGBA32.
 - Truecolor+alpha and grayscale+alpha are returned as RGBA32.
-- Truecolor and grayscale images are returned as RGB24.
-- Truecolor+transparency and grayscale+transparency ones are returned as RGB24 + colorkey.
+- Truecolor (no alpha) are returned as RGB24 (transparency results in colorkey).
+- Grayscale images are returned as indexed color (transparency results in colorkey).
+
 
 SDL_SavePNG() / SDL_SavePNG_RW():
 =================================
@@ -123,4 +124,18 @@ SDL_SavePNG() / SDL_SavePNG_RW():
 Not implemented yet:
 
 - RGB surfaces with or without colorkey and RGBA ones are saved as such.
+
+
+Test suite:
+===========
+
+Test strategy for reading:
+
+- for each image in the test suite, load it both with SDL_LoadPNG and IMG_LoadPNG.
+   pixelformats and image data must be mostly identical.
+
+Test strategy for writing:
+
+- for each image in the test suite, load it, then save to a temporary file,
+  then load the temporary file. Compare pixelformats and pixel data.
 
