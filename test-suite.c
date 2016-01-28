@@ -40,16 +40,24 @@ int test_load(const char *fname) {
         rv += 1;
     }
     if (rv == 0) {
-        int i, fails = 0;
+        int i, fails = 0, j, k;
         Uint8 *spl_row = spl_surf->pixels;
         Uint8 *si_row = si_surf->pixels;
         for (i = 0; i < spl_surf->h ; i++) {
             if ( 0 != memcmp(spl_row + i*spl_surf->pitch, si_row +  i*si_surf->pitch, si_surf->pitch)) {
                 fails += 1;
+                printf("spl: ");
+                for(j=0; j<spl_surf->pitch; j++)
+                    printf("%hhx ", *(spl_row + i*spl_surf->pitch + j));
+                printf("\n");
+                printf("si: ");
+                for(j=0; j<si_surf->pitch; j++)
+                    printf("%hhx ", *(si_row + i*si_surf->pitch + j));
+                printf("\n");
             }
         }
         if (fails > 0) {
-            printf("%s: pixel data doesnt (%d rows)\n", fname, fails);
+            printf("%s: pixel data doesnt match (%d rows)\n", fname, fails);
             rv += fails;
         }
     }
