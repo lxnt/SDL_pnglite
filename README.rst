@@ -128,6 +128,13 @@ Notable differences from IMG_LoadPNG_RW():
 - 16 bit per channel and interlaced images are not accepted.
 
 
+Notable differences from IMG_SavePNG_RW():
+==========================================
+
+- Palettes and colorkeys are preserved as much as possible within the format
+  (IMG_SavePNG_RW() doesn't attempt this at all)
+
+
 Test suite (test-suite.c):
 ==========================
 
