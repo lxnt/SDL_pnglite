@@ -74,7 +74,8 @@ When png_t::color_type is set to:
 - PNG_INDEXED:
     - supplied buffer must contain widht*height bytes of palette indices.
     - png_t::transparency_present may be 0 or 1.
-    - png_t::palette must be initialized to 256-entry RGBX or RGBA palette.
+    - png_t::palette must be initialized to RGBX or RGBA palette and png_t::palette_size
+	  must be set to number of colors in the palette.
 
 - PNG_TRUECOLOR:
     - supplied buffer must contain widht*height*3 bytes of RGB samples.
@@ -89,11 +90,6 @@ Other color types are not supported.
 Filtering is not done - patches are welcome.
 
 Compression is to be assumed suboptimal.
-Indexed images are always written out as 8 bits per pixel.
-
-Full palette is always written out.
-
-If png_t::transparency_present == 1, 256 byte tRNS chunk is written out for indexed images.
 
 
 SDL_Surface wrapper for the above

@@ -692,10 +692,10 @@ png_write_plte(png_t *png)
 {
     unsigned char plte[4 + 4 + 768 + 4];
     int i;
-    const int length = 768;
+    const int length = png->palette_size * 3;
 
     memcpy(plte + 4, "PLTE", 4);
-    for(i = 0 ; i < 256; i++) {
+    for(i = 0 ; i < png->palette_size; i++) {
         plte[8 + 3*i + 0] = png->palette[4*i + 0];
         plte[8 + 3*i + 1] = png->palette[4*i + 1];
         plte[8 + 3*i + 2] = png->palette[4*i + 2];
@@ -715,8 +715,8 @@ static int png_write_trns(png_t *png)
 
     switch (png->color_type) {
     case PNG_INDEXED:
-        length = 256;
-        for(i = 0 ; i < 256; i++)
+        length = png->palette_size * 3;
+        for(i = 0 ; i < png->palette_size; i++)
             trns[8 + i] = png->palette[4*i + 3];
         break;
 
