@@ -401,6 +401,8 @@ SDL_SavePNG32_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
     int rv;
     Uint32 unpitched_row_bytes;
     Uint32 pitched_row_bytes;
+    Uint32 colorkey;
+    int transparency_present = 0;
 
     /* this is perfectly safe to call multiple times
        as long as parameters don't change */
@@ -433,7 +435,20 @@ SDL_SavePNG32_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
                      SDL_GetPixelFormatName(format->format));
         goto error;
     }
-
+    if (0 == SDL_GetColorKey(tmp, &colorkey)) {
+    /* SDL can have a colorkey on RGBA surfaces.
+       Saving to PNG can not not lose this information. */
+        if (png_color_type == PNG_TRUECOLOR) {
+            SDL_GetRGB(colorkey, tmp->format,
+                        &(png.colorkey[1]),
+                        &(png.colorkey[3]),
+                        &(png.colorkey[5]));
+            png.colorkey[0] = 0;
+            png.colorkey[2] = 0;
+            png.colorkey[4] = 0;
+            transparency_present = 1;
+        }
+    }
     unpitched_row_bytes = tmp->w * tmp->format->BytesPerPixel;
     pitched_row_bytes = tmp->pitch;
     data = SDL_malloc(unpitched_row_bytes * tmp->h);
@@ -455,7 +470,7 @@ SDL_SavePNG32_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
         goto error;
     }
 
-    rv = png_set_data(&png, tmp->w, tmp->h, 8, png_color_type, 0, data);
+    rv = png_set_data(&png, tmp->w, tmp->h, 8, png_color_type, transparency_present, data);
     if (rv != PNG_NO_ERROR) {
         SDL_SetError("png_set_data(): %s", png_error_string(rv));
         goto error;
