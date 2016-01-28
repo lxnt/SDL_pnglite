@@ -209,10 +209,8 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
             goto done;
 
         case PNG_GREYSCALE:
-            SDL_PixelFormatEnumToMasks(SDL_PIXELFORMAT_RGB24,
-                            &bpp, &Rmask, &Gmask, &Bmask, &Amask);
-            surface = SDL_CreateRGBSurface(0, png.width, png.height, 24,
-                                           Rmask, Gmask, Bmask, Amask);
+            surface = SDL_CreateRGBSurface(0, png.width, png.height, 8,
+                                            0, 0, 0, 0);
             if (!surface) {
                 goto error;
             }
@@ -223,32 +221,46 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 SDL_OutOfMemory();
                 goto error;
             }
+
             rv = png_get_data(&png, data);
             if (rv != PNG_NO_ERROR) {
                 SDL_SetError("png_get_data(): %s", png_error_string(rv));
                 goto error;
             }
+
             for(pixel = 0 ; pixel < png.width * png.height ; pixel++) {
                 row = pixel / png.width;
                 col = pixel % png.width;
 
-                gray_level = bit_replicate(*(data + pixel), png.depth);
-
                 pixel_start = (Uint8*)(surface->pixels) +
-                                        row*surface->pitch + col*3;
+                                        row*surface->pitch + col;
 
-                *pixel_start++ = gray_level;
-                *pixel_start++ = gray_level;
-                *pixel_start++ = gray_level;
+                *pixel_start = bit_replicate(*(data + pixel), png.depth);
             }
+
+            if (surface->pitch != surface->w) {
+                for (row = png.height - 1; row >= 0; row --) {
+                    pitched_row = (Uint8 *) surface->pixels + row * surface->pitch;
+                    packed_row  = (Uint8 *) surface->pixels + row * png.width;
+                    SDL_memmove(pitched_row, packed_row, png.width);
+                }
+            }
+
+            for (col = 0; col < 256; col++) {
+                palette[col].r = col;
+                palette[col].g = col;
+                palette[col].b = col;
+                palette[col].a = 255;
+            }
+
+            if (SDL_SetPaletteColors(surface->format->palette, palette, 0, 256))
+                goto error;
+
             if (png.transparency_present) {
                 gray_level = bit_replicate(png.colorkey[0], png.depth);
-
-                color = SDL_MapRGB(surface->format, gray_level, gray_level,
-                                    gray_level);
-
-                SDL_SetColorKey(surface, SDL_TRUE, color);
+                SDL_SetColorKey(surface, SDL_TRUE, gray_level);
             }
+
             goto done;
 
         case PNG_GREYSCALE_ALPHA:
