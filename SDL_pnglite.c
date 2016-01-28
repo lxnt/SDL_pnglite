@@ -71,20 +71,27 @@ bit_replicate(unsigned char val, unsigned bits)
     }
 }
 
+/* determine if this paletted image can be loaded as paletted colorkeyed surface.
+    returns -1 if not, index of the colorkey palette entry otherwise. */
 static int
 find_colorkey(png_t *p) {
     int alpha_zero_index = -1;
     int alpha_one_count = 0;
-    int i;
+    int i, alpha;
 
     if ((p->color_type == PNG_INDEXED) && (p->transparency_present)) {
-        for (i = 768; i < 1024; i++) {
-            if (p->palette[i] == 255)
-                alpha_one_count += 1;
-            else if (p->palette[i] == 0)
-                alpha_zero_index = i;
+        for (i = 0; i < p->palette_size; i++) {
+            alpha = p->palette[i + 768];
+            switch (alpha) {
+                case 255:
+                    alpha_one_count += 1;
+                case 0:
+                    alpha_zero_index = i;
+                default:
+                    break;
+            }
         }
-        if (alpha_one_count == 254)
+        if (alpha_one_count == p->palette_size - 1)
             return alpha_zero_index; /* the only transparent */
     }
     return -1;
@@ -292,7 +299,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 goto error;
             }
             colorkey = find_colorkey(&png);
-            if (colorkey == -1) {
+            if ((png.transparency_present) && (colorkey == -1)) {
                 SDL_PixelFormatEnumToMasks(SDL_PIXELFORMAT_RGBA8888,
                                 &bpp, &Rmask, &Gmask, &Bmask, &Amask);
                 surface = SDL_CreateRGBSurface(0, png.width, png.height, 32,
@@ -338,8 +345,9 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 if (SDL_SetPaletteColors(surface->format->palette, palette, 0, 256))
                     goto error;
 
-                if (SDL_SetColorKey(surface, 1, colorkey))
-                    goto error;
+                if (colorkey != -1)
+                    if (SDL_SetColorKey(surface, 1, colorkey))
+                        goto error;
             }
             goto done;
 
