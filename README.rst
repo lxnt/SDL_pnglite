@@ -126,8 +126,17 @@ Not implemented yet:
 - RGB surfaces with or without colorkey and RGBA ones are saved as such.
 
 
-Test suite:
-===========
+Notable differences from IMG_LoadPNG_RW():
+==========================================
+
+- SDL_PIXELFORMAT_RGBA8888 is used instead of SDL_PIXELFORMAT_ABGR8888
+- SDL_image loads PngSuite's tbbn0g04.png (4-bit grayscale with transparency)
+  as SDL_PIXELFORMAT_RGB565 for some reason. (we load it as SDL_PIXELFORMAT_INDEX8 + colorkey)
+- 16 bit per channel and interlaced images are not accepted.
+
+
+Test suite (test-suite.c):
+==========================
 
 Test strategy for reading:
 
@@ -138,4 +147,3 @@ Test strategy for writing:
 
 - for each image in the test suite, load it, then save to a temporary file,
   then load the temporary file. Compare pixelformats and pixel data.
-
