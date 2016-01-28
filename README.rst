@@ -123,7 +123,7 @@ Notable differences from IMG_LoadPNG_RW():
 ==========================================
 
 - SDL_PIXELFORMAT_RGBA8888 is used instead of SDL_PIXELFORMAT_ABGR8888
-- SDL_image loads PngSuite's tbbn0g04.png (4-bit grayscale with transparency)
+- IMG_SavePNG_RW() loads PngSuite's tbbn0g04.png (4-bit grayscale with transparency)
   as SDL_PIXELFORMAT_RGB565 for some reason. (we load it as SDL_PIXELFORMAT_INDEX8 + colorkey)
 - 16 bit per channel and interlaced images are not accepted.
 
