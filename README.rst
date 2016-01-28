@@ -30,13 +30,13 @@ PNG color types and transparency:
 
 - PNG_INDEXED, no transparency:
     - png_get_data() returns I bytestream; required buffer size is width*height
-    - png_t::palette contains 256-entry RGB, unused entries are set to #FFF
+    - png_t::palette contains png_t::palette_size RGB entries, unused entries are set to #FFF
     - png_t::transparency_present is 0
 
 - PNG_INDEXED, with transparency:
     - png_get_data() returns I bytestream; required buffer size is width*height
-    - png_t::palette contains 256-entry RGB palette followed by 256 bytes of alpha channel,
-      unused entries are set to #FFF and FF.
+    - png_t::palette contains png_t::palette_size RGB entries, unused entries are set to #FFF.
+    - png_t::palette[768...1024] contains png_t::palette_size alpha values, unused entries are set to FF.
     - png_t::transparency_present is 1
 
 - PNG_GREYSCALE, no transparency:
@@ -45,7 +45,8 @@ PNG color types and transparency:
 
 - PNG_GREYSCALE, with transparency:
     - png_get_data() returns RGBA bytestream; required buffer size is width*height*4
-    - png_t::colorkey[0] contains the transparent sample value.
+    - png_t::colorkey[0..1] contains the transparent sample value. Since 16 bit depth
+      is not supported, only png_t::colorkey[1] value should be used.
     - png_t::transparency_present is 1
 
 - PNG_TRUECOLOR, no transparency:
@@ -54,7 +55,8 @@ PNG color types and transparency:
 
 - PNG_TRUECOLOR, with transparency:
     - png_get_data() returns RGBA bytestream; required buffer size is width*height*4
-    - png_t::colorkey[0..2] contains the transparent RGB sample values.
+    - png_t::colorkey[0..5] contains the transparent RGB sample values. Since 16 bit depth
+      is not supported, only png_t::colorkey[1,3,5] values should be used.
     - png_t::transparency_present is 1
 
 - PNG_GREYSCALE_ALPHA:
@@ -75,7 +77,7 @@ When png_t::color_type is set to:
     - supplied buffer must contain widht*height bytes of palette indices.
     - png_t::transparency_present may be 0 or 1.
     - png_t::palette must be initialized to RGBX or RGBA palette and png_t::palette_size
-	  must be set to number of colors in the palette.
+      must be set to number of colors in the palette.
 
 - PNG_TRUECOLOR:
     - supplied buffer must contain widht*height*3 bytes of RGB samples.

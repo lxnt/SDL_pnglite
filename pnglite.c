@@ -645,10 +645,6 @@ png_process_chunk(png_t* png)
             if (png_read_check_crc(png, "tRNS", png->colorkey, length) != PNG_NO_ERROR)
                 return PNG_CRC_ERROR;
 
-            png->colorkey[0] = png->colorkey[1];
-            png->colorkey[1] = png->colorkey[3];
-            png->colorkey[2] = png->colorkey[5];
-
             return PNG_NO_ERROR;
 
         case PNG_GREYSCALE:
@@ -659,8 +655,6 @@ png_process_chunk(png_t* png)
 
             if (png_read_check_crc(png, "tRNS", png->colorkey, length) != PNG_NO_ERROR)
                 return PNG_CRC_ERROR;
-
-            png->colorkey[0] = png->colorkey[1];
 
             return PNG_NO_ERROR;
 

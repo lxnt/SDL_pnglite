@@ -202,8 +202,8 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 SDL_memmove(pitched_row, packed_row, png.pitch);
             }
             if (png.transparency_present) {
-                color = SDL_MapRGB(surface->format, png.colorkey[0],
-                                    png.colorkey[1], png.colorkey[2]);
+                color = SDL_MapRGB(surface->format, png.colorkey[1],
+                                    png.colorkey[3], png.colorkey[5]);
                 SDL_SetColorKey(surface, SDL_TRUE, color);
             }
             goto done;
@@ -257,7 +257,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 goto error;
 
             if (png.transparency_present) {
-                gray_level = bit_replicate(png.colorkey[0], png.depth);
+                gray_level = bit_replicate(png.colorkey[1], png.depth);
                 SDL_SetColorKey(surface, SDL_TRUE, gray_level);
             }
 
