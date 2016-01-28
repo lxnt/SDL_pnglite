@@ -96,6 +96,7 @@ typedef struct {
     unsigned                height;
     unsigned char           depth;
     unsigned char           color_type;
+    unsigned char           palette_size;
     unsigned char           transparency_present;
     unsigned char           compression_method;
     unsigned char           filter_method;

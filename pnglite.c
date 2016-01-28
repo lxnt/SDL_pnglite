@@ -613,6 +613,8 @@ png_process_chunk(png_t* png)
         if (length % 3)
             return PNG_CORRUPTED;
 
+        png->palette_size = length / 3;
+
         memset(png->palette, 255, 1024);
 
         if (file_read(png, png->palette, length, 1) != 1)
