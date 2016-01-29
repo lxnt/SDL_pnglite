@@ -614,6 +614,7 @@ png_process_chunk(png_t* png)
             return PNG_CORRUPTED;
 
         png->palette_size = length / 3;
+        printf("l %d ps %d\n", length, png->palette_size);
 
         memset(png->palette, 255, 1024);
 
@@ -627,6 +628,10 @@ png_process_chunk(png_t* png)
         png->transparency_present = 1;
         switch (png->color_type) {
         case PNG_INDEXED:
+            /* no PLTE seen before tRNS */
+            if (png->palette_size == 0)
+                return PNG_CORRUPTED;
+
             if (length > 256)
                 return PNG_CORRUPTED;
 
@@ -662,6 +667,11 @@ png_process_chunk(png_t* png)
             return PNG_CORRUPTED;
         }
     } else if (type == *(unsigned int*)"IDAT") {
+        /* PNG_INDEXED has to have PLTE before IDAT */
+        if ((png->color_type == PNG_INDEXED) &&
+            (png->palette_size == 0))
+            return PNG_CORRUPTED;
+
         /*  if we found an idat, all other idats should be followed
             with no other chunks in between */
         png->png_datalen = png->height * (png->pitch + 1);
@@ -685,8 +695,8 @@ static int
 png_write_plte(png_t *png)
 {
     unsigned char plte[4 + 4 + 768 + 4];
-    int i;
-    const int length = png->palette_size * 3;
+    unsigned i;
+    const unsigned length = png->palette_size * 3;
 
     memcpy(plte + 4, "PLTE", 4);
     for(i = 0 ; i < png->palette_size; i++) {
@@ -704,8 +714,8 @@ png_write_plte(png_t *png)
 static int png_write_trns(png_t *png)
 {
     unsigned char trns[4 + 4 + 256 + 4];
-    int i;
-    int length;
+    unsigned i;
+    unsigned length;
 
     switch (png->color_type) {
     case PNG_INDEXED:
@@ -869,6 +879,7 @@ png_get_data(png_t* png, unsigned char* data)
     const unsigned pipeby = 8 / png->depth; /* pixels per byte */
 
     png->transparency_present = 0;
+    png->palette_size = 0;
     png->png_data = NULL;
 
     while(result == PNG_NO_ERROR)
