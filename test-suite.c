@@ -74,16 +74,15 @@ int compare_surfaces(const char *fname, SDL_Surface *si_surf, SDL_Surface *spl_s
             rv += 1;
         }
         {
-            /* IMG_LoadPNG_RW is known to set ncolors directly to various odd values
-               which can't be done via SDL API. Compare si colors vs spl here, since
-               spl always has 256. */
             int ci, cm = 0;
             for (ci = 0; ci < si_surf->format->palette->ncolors; ci++) {
+                if (ci == spl_surf->format->palette->ncolors)
+                    break;
+
                 if ((spl_surf->format->palette->colors[ci].r != si_surf->format->palette->colors[ci].r) ||
                     (spl_surf->format->palette->colors[ci].g != si_surf->format->palette->colors[ci].g) ||
-                    (spl_surf->format->palette->colors[ci].b != si_surf->format->palette->colors[ci].b)) {
+                    (spl_surf->format->palette->colors[ci].b != si_surf->format->palette->colors[ci].b))
                         cm += 1;
-                }
             }
             if (cm > 0) {
                 printf("%s: palette mismatch %d colors\n", fname, cm);
