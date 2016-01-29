@@ -99,7 +99,8 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
 {
     Sint64 fp_offset = 0;
     SDL_Surface *surface = NULL;
-    SDL_Color palette[256];
+    SDL_Color colorset[256];
+    SDL_Palette *palette = NULL;
     int rv;
     png_t png;
     Uint8  *data = NULL;
@@ -244,13 +245,19 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
             }
 
             for (col = 0; col < 256; col++) {
-                palette[col].r = col;
-                palette[col].g = col;
-                palette[col].b = col;
-                palette[col].a = 255;
+                colorset[col].r = col;
+                colorset[col].g = col;
+                colorset[col].b = col;
+                colorset[col].a = 255;
             }
 
-            if (SDL_SetPaletteColors(surface->format->palette, palette, 0, 256))
+            if (NULL == (palette = SDL_AllocPalette(256)))
+                goto error;
+
+            if (SDL_SetPaletteColors(palette, colorset, 0, 256))
+                goto error;
+
+            if (SDL_SetSurfacePalette(surface, palette))
                 goto error;
 
             if (png.transparency_present) {
@@ -344,14 +351,19 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                     SDL_memmove(surface->pixels, data, surface->w * surface->h);
                 }
 
-                for (col = 0; col < 256; col++) {
-                    palette[col].r = png.palette[3*col + 0];
-                    palette[col].g = png.palette[3*col + 1];
-                    palette[col].b = png.palette[3*col + 2];
-                    palette[col].a = 255;
+                for (col = 0; col < /* png.palette_size */ 256; col++) {
+                    colorset[col].r = png.palette[3*col + 0];
+                    colorset[col].g = png.palette[3*col + 1];
+                    colorset[col].b = png.palette[3*col + 2];
+                    colorset[col].a = 255;
                 }
+                if (NULL == (palette = SDL_AllocPalette( /* png.palette_size */ 256)))
+                    goto error;
 
-                if (SDL_SetPaletteColors(surface->format->palette, palette, 0, 256))
+                if (SDL_SetPaletteColors(palette, colorset, 0, /* png.palette_size */ 256))
+                    goto error;
+
+                if (SDL_SetSurfacePalette(surface, palette))
                     goto error;
 
                 if (colorkey != -1)
@@ -368,21 +380,24 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
     goto done;
 
   error:
-    if (src) {
+    if (src)
         SDL_RWseek(src, fp_offset, RW_SEEK_SET);
-    }
-    if (surface) {
+
+    if (surface)
         SDL_FreeSurface(surface);
-    }
+
     surface = NULL;
 
   done:
-    if (data) {
+    if (palette)
+        SDL_FreePalette(palette);
+
+    if (data)
         SDL_free(data);
-    }
-    if (freesrc && src) {
+
+    if (freesrc && src)
         SDL_RWclose(src);
-    }
+
     return (surface);
 }
 
