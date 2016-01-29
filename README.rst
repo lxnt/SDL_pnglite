@@ -125,9 +125,8 @@ Notable differences from IMG_LoadPNG_RW():
 ==========================================
 
 - SDL_PIXELFORMAT_RGBA8888 is used instead of SDL_PIXELFORMAT_ABGR8888
-- IMG_SavePNG_RW() loads PngSuite's tbbn0g04.png (4-bit grayscale with transparency)
-  as SDL_PIXELFORMAT_RGB565 for some reason. (we load it as SDL_PIXELFORMAT_INDEX8 + colorkey)
-- 16 bit per channel and interlaced images are not accepted.
+- Interlaced images are not accepted
+- 16 bit per channel are not accepted.
 
 
 Notable differences from IMG_SavePNG_RW():
@@ -163,12 +162,13 @@ Test image set:
 Known issues:
 -------------
 
-- IMG_LoadPNG_RW() sets number of palette entries directly. This cannot be done
-  via SDL API (SDL_AllocPalette / SDL_SetSurfacePalette), test-suite dutifully
-  shows ncolors mismatches
+- ``IMG_LoadPNG_RW()`` sets number of palette entries directly. This cannot be done
+  via SDL API (``SDL_AllocPalette()`` / ``SDL_SetSurfacePalette()``). Right now SDL_pnglite
+  creates short palettes, otherwise test-suite will dutifully show palette mismatches.
 - ``tbbn0g04.png: pixel format mismatch spl SDL_PIXELFORMAT_INDEX8 si SDL_PIXELFORMAT_RGB565``
-  any ideas why?
-- Colorkey mismatches in some images. In theory, ncolors mismatch should not cause this.
+  reason is libpng12 returns 2 channels and bit_depth of 8 for this image (no idea why, it's 4bit),
+  then num_channels*bit_depth is used as bpp in ``SDL_CreateRGBSurface()``. This is a bug.
+- Also, ``IMG_LoadPNG_RW()`` incorrectly sets greyscale/rgb colorkeys. How this doesn't show up in tests I cannot fathom.
 
 TODO:
 =====
