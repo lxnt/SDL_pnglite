@@ -614,7 +614,6 @@ png_process_chunk(png_t* png)
             return PNG_CORRUPTED;
 
         png->palette_size = length / 3;
-        printf("l %d ps %d\n", length, png->palette_size);
 
         memset(png->palette, 255, 1024);
 
