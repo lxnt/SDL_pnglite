@@ -46,7 +46,7 @@ static unsigned
 rwops_write_wrapper(void* buf, size_t size, size_t num, void* baton)
 {
     SDL_RWops *rwops = (SDL_RWops *) baton;
-    size_t rv;
+
     if (!buf)
         return 0;
 
@@ -73,8 +73,8 @@ bit_replicate(unsigned char val, unsigned bits)
 static int
 find_colorkey(png_t *p) {
     int alpha_zero_index = -1;
-    int alpha_one_count = 0;
-    int i, alpha;
+    unsigned alpha_one_count = 0;
+    unsigned i, alpha;
 
     if ((p->color_type == PNG_INDEXED) && (p->transparency_present)) {
         for (i = 0; i < p->palette_size; i++) {
