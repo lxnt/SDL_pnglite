@@ -1,55 +1,42 @@
 #include <stdio.h>
 #include <string.h>
+#include <libgen.h>
 #include "SDL.h"
 #include "SDL_pnglite.h"
 #include "SDL_image.h"
 
+int compare_surfaces(const char *fname, SDL_Surface *si_surf, SDL_Surface *spl_surf) {
+    SDL_Surface *stmp = NULL;
+    int rv = 0, do_free_si_surf = 0;
 
-int test_load(const char *fname) {
-    SDL_Surface *si_surf, *spl_surf, *stmp;
-    int rv = 0;
-    
-    spl_surf = SDL_LoadPNG(fname);
-    if (NULL == spl_surf) {
-        printf("SDL_LoadPNG(%s): %s\n", fname , SDL_GetError());
-        return 1;
-    }
-    si_surf = IMG_Load(fname);
-    if (NULL == si_surf) {
-        printf("IMG_Load(%s): %s\n", fname , SDL_GetError());
-        SDL_FreeSurface(spl_surf);
-        return 1;
-    }
     if (spl_surf->format->format != si_surf->format->format) {
         if ((spl_surf->format->format == SDL_PIXELFORMAT_RGBA8888) &&
             (si_surf->format->format == SDL_PIXELFORMAT_ABGR8888)) {
             stmp = si_surf;
             si_surf = SDL_ConvertSurface(stmp, spl_surf->format, 0);
-            SDL_FreeSurface(stmp);
             if (NULL == si_surf) {
                 printf("surf convert failed.\n");
-                SDL_FreeSurface(spl_surf);
                 return 1;
             }
+            do_free_si_surf = 1;
         } else {
-            printf("%s: format doesnt match spl %s si %s\n", fname,
+            printf("%s: pixel format mismatch %s si %s\n", fname,
                 SDL_GetPixelFormatName(spl_surf->format->format),
                 SDL_GetPixelFormatName(si_surf->format->format));
-            rv += 1;
-            goto ret;
+            rv = 1;
         }
     }
 
     if (spl_surf->w != si_surf->w) {
-        printf("%s: w doesnt match spl %d si %d\n", fname, spl_surf->w, si_surf->w);
+        printf("%s: w mismatch %d si %d\n", fname, spl_surf->w, si_surf->w);
         rv += 1;
     }
     if (spl_surf->h != si_surf->h) {
-        printf("%s: h doesnt match spl %d si %d\n", fname, spl_surf->h, si_surf->h);
+        printf("%s: h mismatch %d si %d\n", fname, spl_surf->h, si_surf->h);
         rv += 1;
     }
     if (spl_surf->pitch != si_surf->pitch) {
-        printf("%s: pitch doesnt match spl %d si %d\n", fname, spl_surf->pitch, si_surf->pitch);
+        printf("%s: pitch mismatch %d si %d\n", fname, spl_surf->pitch, si_surf->pitch);
         rv += 1;
     }
     if (rv == 0) {
@@ -70,12 +57,33 @@ int test_load(const char *fname) {
             }
         }
         if (fails > 0) {
-            printf("%s: pixel data doesnt match (%d rows)\n", fname, fails);
+            printf("%s: pixel data mismatch (%d rows)\n", fname, fails);
             rv += fails;
         }
     }
+    if (do_free_si_surf)
+        SDL_FreeSurface(si_surf);
+    return rv;
+}
 
- ret:
+int test_load(const char *fname) {
+    SDL_Surface *si_surf, *spl_surf;
+    int rv = 0;
+
+    spl_surf = SDL_LoadPNG(fname);
+    if (NULL == spl_surf) {
+        printf("SDL_LoadPNG(%s): %s\n", fname , SDL_GetError());
+        return 1;
+    }
+    si_surf = IMG_Load(fname);
+    if (NULL == si_surf) {
+        printf("IMG_Load(%s): %s\n", fname , SDL_GetError());
+        SDL_FreeSurface(spl_surf);
+        return 1;
+    }
+
+    rv += compare_surfaces(fname, si_surf, spl_surf);
+
     SDL_FreeSurface(si_surf);
     SDL_FreeSurface(spl_surf);
 
@@ -83,28 +91,112 @@ int test_load(const char *fname) {
 }
 
 int test_save(const char *fname) {
-    return 0;
+    SDL_Surface *si_surf = NULL, *spl_surf = NULL;
+    SDL_RWops *rwo = NULL;
+    void *rwo_buf = NULL;
+    const int rwo_buf_sz = 1048576;
+    int rv = 0;
+    size_t sz;
+
+    spl_surf = SDL_LoadPNG(fname);
+    if (NULL == spl_surf) {
+        printf("SDL_LoadPNG(%s): %s\n", fname , SDL_GetError());
+        rv = 1;
+        goto exit;
+    }
+
+    rwo_buf = SDL_malloc(rwo_buf_sz);
+    if (NULL == rwo_buf) {
+        printf("SDL_malloc(): %s\n", SDL_GetError());
+        return 1;
+    }
+    rwo = SDL_RWFromMem(rwo_buf, rwo_buf_sz);
+    if (NULL == rwo) {
+        printf("SDL_RWFromMem(): %s\n", SDL_GetError());
+        rv = 1;
+        goto exit;
+    }
+
+    if (-1 == SDL_SavePNG_RW(spl_surf, rwo, 0)) {
+        printf("%s: SDL_SavePNG_RW(): %s\n", fname, SDL_GetError());
+        rv = 1;
+        goto exit;
+    }
+    sz = SDL_RWtell(rwo);
+    SDL_RWseek(rwo, 0, RW_SEEK_SET);
+
+    si_surf = IMG_LoadPNG_RW(rwo);
+    if (NULL == si_surf) {
+        printf("IMG_Load(%s): %s\n", fname , SDL_GetError());
+        {
+            FILE *fp;
+            printf("rwo: size=%d len=%d\n", SDL_RWsize(rwo), sz);
+            fp = fopen("/tmp/eba.png", "wb");
+            fwrite(rwo_buf, sz, 1, fp);
+            fclose(fp);
+            exit(1);
+        }
+
+
+        rv = 1;
+        goto exit;
+    }
+
+    rv += compare_surfaces(fname, si_surf, spl_surf);
+
+  exit:
+    if (rwo)
+        SDL_FreeRW(rwo);
+    if (rwo_buf)
+        SDL_free(rwo_buf);
+    if (spl_surf)
+        SDL_FreeSurface(spl_surf);
+    if (si_surf)
+        SDL_FreeSurface(si_surf);
+    return rv;
+}
+
+int gotta_fail(const char *fn) {
+    char *fncopy, *bn;
+    int rv;
+
+    fncopy = strdup(fn);
+    bn = basename(fncopy);
+
+    rv = (bn[0] == 'x');
+    free(fncopy);
+    return rv;
 }
 
 int main(int argc, char *argv[]) {
-    int fails;    
+    int fails, i;
+    char *fname;
 
-    for (; argc > 1; argc--) {
-        
-        if ((fails = test_load(argv[argc-1])) > 0) {
-            if (argv[argc-1][0] != 'x') {
-                printf("%s: load: %d fails\n", argv[argc-1], fails);
+    for (i = 1; i < argc; i++) {
+        fname = argv[i];
+        fails = test_load(fname);
+        if (fails == 0) {
+            if (gotta_fail(fname)) {
+                printf("%s: loaded corrupted file.\n", fname);
+            } else {
+                printf("%s: OK\n", fname);
             }
-        } else {
-            printf("%s: OK\n", argv[argc-1]);
         }
-        continue;
-        fflush(stdout);
-        if ((fails = test_save(argv[argc-1])) > 0) {
-            printf("%s: save: %d fails\n", argv[argc-1], fails);
-        }
-
     }
+    printf("========================================\n");
+    for (i = 1; i < argc; i++) {
+        fname = argv[i];
+        fails = test_save(fname);
+        if (fails == 0) {
+            if (gotta_fail(fname)) {
+                printf("%s: loaded corrupted file.\n", fname);
+            } else {
+                printf("%s: OK\n", fname);
+            }
+        }
+    }
+    IMG_Quit();
+    SDL_Quit();
     return 0;
 }
 
