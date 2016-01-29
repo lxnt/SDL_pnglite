@@ -723,7 +723,7 @@ static int png_write_trns(png_t *png)
 
     switch (png->color_type) {
     case PNG_INDEXED:
-        length = png->palette_size * 3;
+        length = png->palette_size;
         for(i = 0 ; i < png->palette_size; i++)
             trns[8 + i] = png->palette[4*i + 3];
         break;
