@@ -697,6 +697,9 @@ png_write_plte(png_t *png)
     unsigned i;
     const unsigned length = png->palette_size * 3;
 
+    if ((png->palette_size > 256) || (png->palette_size == 0))
+        return PNG_CORRUPTED;
+
     memcpy(plte + 4, "PLTE", 4);
     for(i = 0 ; i < png->palette_size; i++) {
         plte[8 + 3*i + 0] = png->palette[4*i + 0];
@@ -704,10 +707,12 @@ png_write_plte(png_t *png)
         plte[8 + 3*i + 2] = png->palette[4*i + 2];
     }
 
+    set_ul(plte, length);
+
     if (file_write(png, plte, length + 8, 1) != 1)
         return PNG_IO_ERROR;
 
-    return png_calc_write_crc(png, "PLTE", plte + 4, length);
+    return png_calc_write_crc(png, "PLTE", plte + 8, length);
 }
 
 static int png_write_trns(png_t *png)
@@ -748,7 +753,7 @@ static int png_write_trns(png_t *png)
     if (file_write(png, trns, length + 8, 1) != 1)
         return PNG_IO_ERROR;
 
-    return png_calc_write_crc(png, "tRNS", trns + 4, length);
+    return png_calc_write_crc(png, "tRNS", trns + 8, length);
 }
 
 static unsigned char
