@@ -152,6 +152,14 @@ Test strategy for saving:
 - For each image in the test suite, load it, then save to a memory buffer,
   then load from the buffer with IMG_LoadPNG_RW(). Compare pixelformats and pixel data.
 
+Test image set:
+---------------
+
+- get PngSuite from http://www.schaik.com/pngsuite/
+- remove all 16bpp and interlaced images (``rm *16.png ???i*.png``)
+- submit the rest to the test suite:  ``./test-suite /path/to/subset/*.png``
+- files starting with 'x' are supposed to fail loading.
+
 
 TODO:
 =====
