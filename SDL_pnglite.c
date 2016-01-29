@@ -88,7 +88,7 @@ find_colorkey(png_t *p) {
                     break;
             }
         }
-        if (alpha_one_count == p->palette_size - 1)
+        if (alpha_one_count == (p->palette_size - 1))
             return alpha_zero_index; /* the only transparent */
     }
     return -1;
@@ -351,23 +351,29 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                     SDL_memmove(surface->pixels, data, surface->w * surface->h);
                 }
 
-                for (col = 0; col < /* png.palette_size */ 256; col++) {
+                for (col = 0; col < 256; col++) {
                     colorset[col].r = png.palette[3*col + 0];
                     colorset[col].g = png.palette[3*col + 1];
                     colorset[col].b = png.palette[3*col + 2];
                     colorset[col].a = 255;
                 }
-                if (NULL == (palette = SDL_AllocPalette( /* png.palette_size */ 256)))
+#if !defined(USE_PALETTE_API)
+                memcpy(surface->format->palette->colors, colorset,
+                                png.palette_size * sizeof(SDL_Color));
+                surface->format->palette->ncolors = png.palette_size;
+#else
+                if (NULL == (palette = SDL_AllocPalette(256)))
                     goto error;
 
-                if (SDL_SetPaletteColors(palette, colorset, 0, /* png.palette_size */ 256))
+                if (SDL_SetPaletteColors(palette, colorset, 0, 256))
                     goto error;
 
                 if (SDL_SetSurfacePalette(surface, palette))
                     goto error;
+#endif
 
                 if (colorkey != -1)
-                    if (SDL_SetColorKey(surface, 1, colorkey))
+                    if (SDL_SetColorKey(surface, SDL_TRUE, colorkey))
                         goto error;
             }
             goto done;
