@@ -684,17 +684,17 @@ static int png_write_trns(png_t *png)
     case PNG_GREYSCALE:
         length = 2;
         trns[8 + 0] = 0;
-        trns[8 + 1] = png->colorkey[0];
+        trns[8 + 1] = png->colorkey[1];
         break;
 
     case PNG_TRUECOLOR:
         length = 6;
         trns[8 + 0] = 0;
-        trns[8 + 1] = png->colorkey[0];
+        trns[8 + 1] = png->colorkey[1];
         trns[8 + 2] = 0;
-        trns[8 + 3] = png->colorkey[1];
+        trns[8 + 3] = png->colorkey[3];
         trns[8 + 4] = 0;
-        trns[8 + 5] = png->colorkey[2];
+        trns[8 + 5] = png->colorkey[5];
         break;
 
     default:
