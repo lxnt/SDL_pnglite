@@ -9,7 +9,7 @@ else()
   set(ARCH64 FALSE)
 endif()
 
-set(CMAKE_C_FLAGS "-Wall -Wextra -pedantic -fvisibility=hidden -msse -m3dnow -mmmx")
+set(CMAKE_C_FLAGS "-Wall -Wextra -pedantic -fvisibility=hidden")
 set(CMAKE_C_FLAGS_DEBUG "-ggdb3")
 set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -ggdb3")
 set(CMAKE_C_FLAGS_RELEASE "-O3 -ggdb3")
