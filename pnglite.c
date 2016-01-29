@@ -456,17 +456,22 @@ png_write_idats(png_t* png, unsigned char* data)
     written = size - 12;
 
     err = compress(idat + 8, &written, data, png->height * ( png->pitch + 1));
-    if (err != Z_OK)
-        return PNG_ZLIB_ERROR;
+    if (err != Z_OK) {
+        err = PNG_ZLIB_ERROR;
+        goto done;
+    }
 
     set_ul(idat, written);
     crc = png_calc_crc("IDAT", idat + 8, written);
 
-    if (file_write(png, idat, written + 8, 1) != 1)
-        return PNG_IO_ERROR;
-
-    if (PNG_NO_ERROR != file_write_ul(png, crc))
-        return PNG_IO_ERROR;
+    if (file_write(png, idat, written + 8, 1) != 1) {
+        err = PNG_IO_ERROR;
+        goto done;
+    }
+    if (PNG_NO_ERROR != file_write_ul(png, crc)) {
+        err = PNG_IO_ERROR;
+        goto done;
+    }
 
     /* write IEND chunk */
     file_write_ul(png, 0);
@@ -474,7 +479,11 @@ png_write_idats(png_t* png, unsigned char* data)
     crc = crc32(0L, (const unsigned char *)"IEND", 4);
     file_write_ul(png, crc);
 
-    return PNG_NO_ERROR;
+    err =  PNG_NO_ERROR;
+
+  done:
+    png_free(idat);
+    return err;
 }
 
 static int
