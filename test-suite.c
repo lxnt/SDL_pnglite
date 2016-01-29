@@ -6,7 +6,7 @@
 
 
 int test_load(const char *fname) {
-    SDL_Surface *si_surf, *spl_surf;
+    SDL_Surface *si_surf, *spl_surf, *stmp;
     int rv = 0;
     
     spl_surf = SDL_LoadPNG(fname);
@@ -17,14 +17,27 @@ int test_load(const char *fname) {
     si_surf = IMG_Load(fname);
     if (NULL == si_surf) {
         printf("IMG_Load(%s): %s\n", fname , SDL_GetError());
+        SDL_FreeSurface(spl_surf);
         return 1;
     }
     if (spl_surf->format->format != si_surf->format->format) {
-        printf("%s: format doesnt match spl %s si %s\n", fname, 
-            SDL_GetPixelFormatName(spl_surf->format->format),
-            SDL_GetPixelFormatName(si_surf->format->format));
-        rv += 1;
-        goto ret;
+        if ((spl_surf->format->format == SDL_PIXELFORMAT_RGBA8888) &&
+            (si_surf->format->format == SDL_PIXELFORMAT_ABGR8888)) {
+            stmp = si_surf;
+            si_surf = SDL_ConvertSurface(stmp, spl_surf->format, 0);
+            SDL_FreeSurface(stmp);
+            if (NULL == si_surf) {
+                printf("surf convert failed.\n");
+                SDL_FreeSurface(spl_surf);
+                return 1;
+            }
+        } else {
+            printf("%s: format doesnt match spl %s si %s\n", fname,
+                SDL_GetPixelFormatName(spl_surf->format->format),
+                SDL_GetPixelFormatName(si_surf->format->format));
+            rv += 1;
+            goto ret;
+        }
     }
 
     if (spl_surf->w != si_surf->w) {
