@@ -34,18 +34,6 @@ add_library(SDL_pnglite STATIC SDL_pnglite.c pnglite.c)
 install(TARGETS SDL_pnglite ARCHIVE DESTINATION lib)
 install(FILES  SDL_pnglite.h DESTINATION include/SDL2)
 
-add_executable(test-save test-save.c )
-target_link_libraries(test-save  SDL_pnglite ${PKG_SDL2_LIBRARIES}  z)
-
-add_executable(test-save-paletted-bmp test-save-paletted-bmp.c )
-target_link_libraries(test-save-paletted-bmp ${PKG_SDL2_LIBRARIES})
-
-add_executable(test-load test-load.c )
-target_link_libraries(test-load  SDL_pnglite ${PKG_SDL2_LIBRARIES} z)
-
-add_executable(test-lib-load test-lib-load.c pnglite.c )
-target_link_libraries(test-lib-load z)
-
 pkg_check_modules(PKG_SDL2IMAGE QUIET SDL2_image)
 if (PKG_SDL2IMAGE_FOUND)
     link_directories(${PKG_SDL2IMAGE_LIBRARY_DIRS})
