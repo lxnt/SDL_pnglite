@@ -82,8 +82,10 @@ find_colorkey(png_t *p) {
             switch (alpha) {
                 case 255:
                     alpha_one_count += 1;
+                    break;
                 case 0:
                     alpha_zero_index = i;
+                    break;
                 default:
                     break;
             }
