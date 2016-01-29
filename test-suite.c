@@ -5,6 +5,30 @@
 #include "SDL_pnglite.h"
 #include "SDL_image.h"
 
+#define DUMP
+void dump_rwo(const char *fname, const void *rwo_buf, SDL_RWops *rwo, const size_t sz) {
+#if defined(DUMP)
+    FILE *fp;
+    char *fncopy, *bn, smash[1024];
+    printf("rwo: size=%d len=%d\n", (int)SDL_RWsize(rwo), (int)sz);
+    fncopy = strdup(fname);
+    bn = basename(fncopy);
+    smash[0] = 0;
+    strcat(smash, "/tmp/pnglite/");
+    strcat(smash, bn);
+    if (NULL != (fp = fopen(smash, "wb"))) {
+        fwrite(rwo_buf, sz, 1, fp);
+        fclose(fp);
+        printf("wrote %s\n", smash);
+    } else {
+        printf("can't write %s\n", smash);
+    }
+    exit(1);
+#else
+    rwo += sz;
+#endif
+}
+
 int compare_surfaces(const char *fname, SDL_Surface *si_surf, SDL_Surface *spl_surf) {
     SDL_Surface *stmp = NULL;
     int rv = 0, do_free_si_surf = 0, pixel_format_mismatch = 0;
@@ -181,27 +205,14 @@ printf("w %d h %d pitch %d pf %s\n",
     si_surf = IMG_LoadPNG_RW(rwo);
     if (NULL == si_surf) {
         printf("IMG_Load(%s): %s\n", fname , SDL_GetError());
-#if defined(LOUD)
-        {
-            FILE *fp;
-            char *fncopy, *bn, smash[1024];
-            printf("rwo: size=%d len=%d\n", (int)SDL_RWsize(rwo), (int)sz);
-            fncopy = strdup(fname);
-            bn = basename(fncopy);
-            smash[0] = 0;
-            strcat(smash, "/tmp/pnglite/");
-            strcat(smash, bn);
-            fp = fopen(smash, "wb");
-            fwrite(rwo_buf, sz, 1, fp);
-            fclose(fp);
-            exit(1);
-        }
-#endif
+        dump_rwo(fname, rwo_buf, rwo, sz);
         rv = 1;
         goto exit;
     }
 
     rv += compare_surfaces(fname, si_surf, spl_surf);
+    if (rv)
+        dump_rwo(fname, rwo_buf, rwo, sz);
 
   exit:
     if (rwo)
