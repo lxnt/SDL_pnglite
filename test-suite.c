@@ -9,19 +9,16 @@
 void dump_rwo(const char *fname, const void *rwo_buf, SDL_RWops *rwo, const size_t sz) {
 #if defined(DUMP)
     FILE *fp;
-    char *fncopy, *bn, smash[1024];
+    char *fncopy, *bn;
     printf("rwo: size=%d len=%d\n", (int)SDL_RWsize(rwo), (int)sz);
     fncopy = strdup(fname);
     bn = basename(fncopy);
-    smash[0] = 0;
-    strcat(smash, "/tmp/pnglite/");
-    strcat(smash, bn);
-    if (NULL != (fp = fopen(smash, "wb"))) {
+    if (NULL != (fp = fopen(bn, "w"))) {
         fwrite(rwo_buf, sz, 1, fp);
         fclose(fp);
-        printf("wrote %s\n", smash);
+        printf("wrote %s\n", bn);
     } else {
-        printf("can't write %s\n", smash);
+        printf("can't write %s\n", bn);
     }
     exit(1);
 #else
