@@ -4,6 +4,9 @@ libpnglite with indexed color types support
 http://www.w3.org/TR/PNG/
 
 
+**Caution:** do not use this to read unstrusted data - PNG files you did not author, recompress, optimize or test yourself.
+
+
 Reading:
 ========
 
