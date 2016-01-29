@@ -160,6 +160,15 @@ Test image set:
 - submit the rest to the test suite:  ``./test-suite /path/to/subset/*.png``
 - files starting with 'x' are supposed to fail loading.
 
+Known issues:
+-------------
+
+- IMG_LoadPNG_RW() sets number of palette entries directly. This cannot be done
+  via SDL API (SDL_AllocPalette / SDL_SetSurfacePalette), test-suite dutifully
+  shows ncolors mismatches
+- ``tbbn0g04.png: pixel format mismatch spl SDL_PIXELFORMAT_INDEX8 si SDL_PIXELFORMAT_RGB565``
+  any ideas why?
+- Colorkey mismatches in some images. In theory, ncolors mismatch should not cause this.
 
 TODO:
 =====
