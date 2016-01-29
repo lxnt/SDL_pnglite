@@ -380,28 +380,6 @@ png_close_file(png_t* png)
 }
 
 static int
-png_init_deflate(png_t* png, unsigned char* data, int datalen)
-{
-    z_stream *stream;
-    png->zs = png_alloc(sizeof(z_stream));
-
-    stream = png->zs;
-
-    if(!stream)
-        return PNG_MEMORY_ERROR;
-
-    memset(stream, 0, sizeof(z_stream));
-
-    if(deflateInit(stream, Z_DEFAULT_COMPRESSION) != Z_OK)
-        return PNG_ZLIB_ERROR;
-
-    stream->next_in = data;
-    stream->avail_in = datalen;
-
-    return PNG_NO_ERROR;
-}
-
-static int
 png_init_inflate(png_t* png)
 {
     z_stream *stream;
@@ -418,21 +396,6 @@ png_init_inflate(png_t* png)
 
     stream->next_out = png->png_data;
     stream->avail_out = png->png_datalen;
-
-    return PNG_NO_ERROR;
-}
-
-static int
-png_end_deflate(png_t* png)
-{
-    z_stream *stream = png->zs;
-
-    if(!stream)
-        return PNG_MEMORY_ERROR;
-
-    deflateEnd(stream);
-
-    png_free(png->zs);
 
     return PNG_NO_ERROR;
 }
@@ -476,55 +439,36 @@ png_inflate(png_t* png, unsigned char* data, int len)
     return PNG_NO_ERROR;
 }
 
-static int
-png_deflate(png_t* png, unsigned char* outdata, int outlen, int *outwritten)
-{
-    int result;
-
-    z_stream *stream = png->zs;
-
-
-    if(!stream)
-        return PNG_MEMORY_ERROR;
-
-    stream->next_out = (unsigned char*)outdata;
-    stream->avail_out = outlen;
-
-    result = deflate(stream, Z_SYNC_FLUSH);
-
-    *outwritten = outlen - stream->avail_out;
-
-    if(result != Z_STREAM_END && result != Z_OK)
-        return PNG_ZLIB_ERROR;
-
-    return result;
-}
 
 static int
 png_write_idats(png_t* png, unsigned char* data)
 {
-    unsigned char *chunk;
-    unsigned long written;
-    unsigned long crc;
-    unsigned size = png->height * (png->pitch + 1);
+    unsigned char *idat;
+    unsigned long  written;
+    unsigned crc;
+    unsigned size;
+    int err;
 
-    (void)png_init_deflate;
-    (void)png_end_deflate;
-    (void)png_deflate;
+    size = 8 + compressBound(png->height * png->pitch) + 4;
+    idat = png_alloc(size);
+    memcpy(idat + 4, "IDAT", 4);
 
-    chunk = png_alloc(size);
-    memcpy(chunk, "IDAT", 4);
+    written = size - 12;
 
-    written = size;
-    compress(chunk+4, &written, data, size);
+    err = compress(idat + 8, &written, data, png->height * ( png->pitch + 1));
+    if (err != Z_OK)
+        return PNG_ZLIB_ERROR;
 
-    crc = crc32(0L, Z_NULL, 0);
-    crc = crc32(crc, chunk, written + 4);
-    set_ul(chunk + written + 4, crc);
-    file_write_ul(png, written);
-    file_write(png, chunk, 1, written + 8);
-    png_free(chunk);
+    set_ul(idat, written);
+    crc = png_calc_crc("IDAT", idat + 8, written);
 
+    if (file_write(png, idat, written + 8, 1) != 1)
+        return PNG_IO_ERROR;
+
+    if (PNG_NO_ERROR != file_write_ul(png, crc))
+        return PNG_IO_ERROR;
+
+    /* write IEND chunk */
     file_write_ul(png, 0);
     file_write(png, "IEND", 1, 4);
     crc = crc32(0L, (const unsigned char *)"IEND", 4);
@@ -671,7 +615,7 @@ png_process_chunk(png_t* png)
             (png->palette_size == 0))
             return PNG_CORRUPTED;
 
-        /*  if we found an idat, all other idats should be followed
+        /*  if we found an idat, all other idats should follow
             with no other chunks in between */
         png->png_datalen = png->height * (png->pitch + 1);
         png->png_data = png_alloc(png->png_datalen);
