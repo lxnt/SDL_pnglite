@@ -50,10 +50,7 @@ rwops_write_wrapper(void* buf, size_t size, size_t num, void* baton)
     if (!buf)
         return 0;
 
-    rv = SDL_RWwrite(rwops, buf, size, num);
-    if (rv != size*num)
-        SDL_Error(SDL_EFWRITE);
-    return 0;
+    return SDL_RWwrite(rwops, buf, size, num);
 }
 
 static unsigned char
