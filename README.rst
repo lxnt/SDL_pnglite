@@ -140,12 +140,32 @@ Notable differences from IMG_SavePNG_RW():
 Test suite (test-suite.c):
 ==========================
 
-Test strategy for reading:
+Test strategy for loading:
+--------------------------
 
-- for each image in the test suite, load it both with SDL_LoadPNG and IMG_LoadPNG.
-   pixelformats and image data must be mostly identical.
+- For each image in the test suite, load it both with SDL_LoadPNG() and IMG_Load().
+  Pixelformats and image data must be mostly identical.
 
-Test strategy for writing:
+Test strategy for saving:
+-------------------------
 
-- for each image in the test suite, load it, then save to a temporary file,
-  then load the temporary file. Compare pixelformats and pixel data.
+- For each image in the test suite, load it, then save to a memory buffer,
+  then load from the buffer with IMG_LoadPNG_RW(). Compare pixelformats and pixel data.
+
+
+TODO:
+=====
+
+libpnglite:
+-----------
+
+- Convert to stdint (and/or maybe native-zlib) types
+- Maybe present palette as RGBx/RGBA on load (as it is submitted for saving).
+- Discover and fix endianness-related bugs.
+- Fix png_t::pitch vs filter type ambigousness
+
+SDL_pnglite:
+------------
+
+- Discover and fix endianness-related bugs
+
