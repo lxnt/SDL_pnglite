@@ -7,7 +7,7 @@
 
 int compare_surfaces(const char *fname, SDL_Surface *si_surf, SDL_Surface *spl_surf) {
     SDL_Surface *stmp = NULL;
-    int rv = 0, do_free_si_surf = 0;
+    int rv = 0, do_free_si_surf = 0, pixel_format_mismatch = 0;
 
     if (spl_surf->format->format != si_surf->format->format) {
         if ((spl_surf->format->format == SDL_PIXELFORMAT_RGBA8888) &&
@@ -24,6 +24,7 @@ int compare_surfaces(const char *fname, SDL_Surface *si_surf, SDL_Surface *spl_s
                 SDL_GetPixelFormatName(spl_surf->format->format),
                 SDL_GetPixelFormatName(si_surf->format->format));
             rv = 1;
+            pixel_format_mismatch = 1;
         }
     }
 
@@ -39,44 +40,50 @@ int compare_surfaces(const char *fname, SDL_Surface *si_surf, SDL_Surface *spl_s
         printf("%s: pitch mismatch spl %d si %d\n", fname, spl_surf->pitch, si_surf->pitch);
         rv += 1;
     }
-    if (rv == 0) {
-        if (spl_surf->format->palette) {
-            if (spl_surf->format->palette->ncolors != si_surf->format->palette->ncolors) {
-                printf("%s: palette ncolors mismatch spl %d si %d\n", fname,
-                        spl_surf->format->palette->ncolors, si_surf->format->palette->ncolors);
-                rv += 1;
-            } else {
-                int ci, cm = 0;
-                for (ci = 0; ci < spl_surf->format->palette->ncolors; ci++) {
-                    if ((spl_surf->format->palette->colors[ci].r != si_surf->format->palette->colors[ci].r) ||
-                        (spl_surf->format->palette->colors[ci].g != si_surf->format->palette->colors[ci].g) ||
-                        (spl_surf->format->palette->colors[ci].b != si_surf->format->palette->colors[ci].b)) {
-                            cm += 1;
-                    }
-                }
-                if (cm > 0) {
-                    printf("%s: palette mismatch %d colors\n", fname, cm);
-                    rv += cm;
-                }
-            }
+    if (pixel_format_mismatch)
+        goto done;
+
+    if (spl_surf->format->palette) {
+        if (spl_surf->format->palette->ncolors != si_surf->format->palette->ncolors) {
+            printf("%s: palette ncolors mismatch spl %d si %d\n", fname,
+                    spl_surf->format->palette->ncolors, si_surf->format->palette->ncolors);
+            rv += 1;
         }
         {
-            Uint32 spl_key = 0, si_key = 42;
-            int si_rv, spl_rv;
-            spl_rv = SDL_GetColorKey(spl_surf, &spl_key);
-            si_rv = SDL_GetColorKey(si_surf, &si_key);
-            if (si_rv != spl_rv) {
-                printf("%s: SDL_GetColorKey() rv mismatch spl %d si %d \n", fname, spl_rv, si_rv);
-                rv += 1;
-            } else {
-                if ((si_rv == 0) && (spl_key != si_key)) {
-                    printf("%s: colorkey mismatch spl %x si %x\n", fname, spl_key, si_key);
-                    rv += 1;
+            /* IMG_LoadPNG_RW is known to set ncolors directly to various odd values
+               which can't be done via SDL API. Compare si colors vs spl here, since
+               spl always has 256. */
+            int ci, cm = 0;
+            for (ci = 0; ci < si_surf->format->palette->ncolors; ci++) {
+                if ((spl_surf->format->palette->colors[ci].r != si_surf->format->palette->colors[ci].r) ||
+                    (spl_surf->format->palette->colors[ci].g != si_surf->format->palette->colors[ci].g) ||
+                    (spl_surf->format->palette->colors[ci].b != si_surf->format->palette->colors[ci].b)) {
+                        cm += 1;
                 }
+            }
+            if (cm > 0) {
+                printf("%s: palette mismatch %d colors\n", fname, cm);
+                rv += cm;
             }
         }
     }
-    if (rv == 0) {
+    {
+        Uint32 spl_key = 0, si_key = 42;
+        int si_rv, spl_rv;
+        spl_rv = SDL_GetColorKey(spl_surf, &spl_key);
+        si_rv = SDL_GetColorKey(si_surf, &si_key);
+        if (si_rv != spl_rv) {
+            printf("%s: SDL_GetColorKey() rv mismatch spl %d si %d \n", fname, spl_rv, si_rv);
+            rv += 1;
+        } else {
+            if ((si_rv == 0) && (spl_key != si_key)) {
+                printf("%s: colorkey mismatch spl %x si %x\n", fname, spl_key, si_key);
+                rv += 1;
+            }
+        }
+    }
+
+    {
         int i, fails = 0, j;
         Uint8 *spl_row = spl_surf->pixels;
         Uint8 *si_row = si_surf->pixels;
@@ -98,6 +105,8 @@ int compare_surfaces(const char *fname, SDL_Surface *si_surf, SDL_Surface *spl_s
             rv += fails;
         }
     }
+
+  done:
     if (do_free_si_surf)
         SDL_FreeSurface(si_surf);
     return rv;
