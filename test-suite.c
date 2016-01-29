@@ -39,8 +39,9 @@ int compare_surfaces(const char *fname, SDL_Surface *si_surf, SDL_Surface *spl_s
         printf("%s: pitch mismatch %d si %d\n", fname, spl_surf->pitch, si_surf->pitch);
         rv += 1;
     }
+    /* compare palette data here first */
     if (rv == 0) {
-        int i, fails = 0, j, k;
+        int i, fails = 0, j;
         Uint8 *spl_row = spl_surf->pixels;
         Uint8 *si_row = si_surf->pixels;
         for (i = 0; i < spl_surf->h ; i++) {
@@ -75,6 +76,10 @@ int test_load(const char *fname) {
         printf("SDL_LoadPNG(%s): %s\n", fname , SDL_GetError());
         return 1;
     }
+#if defined(LOUD)
+printf("w %d h %d pitch %d pf %s\n",
+    spl_surf->w, spl_surf->h, spl_surf->pitch, SDL_GetPixelFormatName(spl_surf->format->format));
+#endif
     si_surf = IMG_Load(fname);
     if (NULL == si_surf) {
         printf("IMG_Load(%s): %s\n", fname , SDL_GetError());
@@ -104,7 +109,10 @@ int test_save(const char *fname) {
         rv = 1;
         goto exit;
     }
-
+#if defined(LOUD)
+printf("w %d h %d pitch %d pf %s\n",
+    spl_surf->w, spl_surf->h, spl_surf->pitch, SDL_GetPixelFormatName(spl_surf->format->format));
+#endif
     rwo_buf = SDL_malloc(rwo_buf_sz);
     if (NULL == rwo_buf) {
         printf("SDL_malloc(): %s\n", SDL_GetError());
@@ -128,16 +136,22 @@ int test_save(const char *fname) {
     si_surf = IMG_LoadPNG_RW(rwo);
     if (NULL == si_surf) {
         printf("IMG_Load(%s): %s\n", fname , SDL_GetError());
+#if defined(LOUD)
         {
             FILE *fp;
-            printf("rwo: size=%d len=%d\n", SDL_RWsize(rwo), sz);
-            fp = fopen("/tmp/eba.png", "wb");
+            char *fncopy, *bn, smash[1024];
+            printf("rwo: size=%d len=%d\n", (int)SDL_RWsize(rwo), (int)sz);
+            fncopy = strdup(fname);
+            bn = basename(fncopy);
+            smash[0] = 0;
+            strcat(smash, "/tmp/pnglite/");
+            strcat(smash, bn);
+            fp = fopen(smash, "wb");
             fwrite(rwo_buf, sz, 1, fp);
             fclose(fp);
             exit(1);
         }
-
-
+#endif
         rv = 1;
         goto exit;
     }
