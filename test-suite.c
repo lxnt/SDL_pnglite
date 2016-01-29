@@ -20,7 +20,7 @@ void dump_rwo(const char *fname, const void *rwo_buf, SDL_RWops *rwo, const size
     } else {
         printf("can't write %s\n", bn);
     }
-    exit(1);
+    /* exit(1); */
 #else
     rwo += sz;
 #endif
