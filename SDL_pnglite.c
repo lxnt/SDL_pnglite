@@ -111,8 +111,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
     Uint32 Gmask = 0;
     Uint32 Bmask = 0;
     Uint32 Amask = 0;
-    int row;
-    int col;
+    Uint32 row, col;
     Uint8 index;
     Uint32 gray_level;
     Uint8 alpha;
@@ -196,9 +195,9 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 SDL_SetError("png_get_data(): %s", png_error_string(rv));
                 goto error;
             }
-            for (row = png.height - 1; row >= 0; row --) {
-                pitched_row = (Uint8 *) surface->pixels + row * surface->pitch;
-                packed_row  = (Uint8 *) surface->pixels + row * png.pitch;
+            for (row = png.height; row > 0; row --) {
+                pitched_row = (Uint8 *) surface->pixels + (row-1) * surface->pitch;
+                packed_row  = (Uint8 *) surface->pixels + (row-1) * png.pitch;
                 SDL_memmove(pitched_row, packed_row, png.pitch);
             }
             if (png.transparency_present) {
@@ -239,9 +238,9 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
             }
 
             if (surface->pitch != surface->w) {
-                for (row = png.height - 1; row >= 0; row --) {
-                    pitched_row = (Uint8 *) surface->pixels + row * surface->pitch;
-                    packed_row  = (Uint8 *) surface->pixels + row * png.width;
+                for (row = png.height; row > 0; row --) {
+                    pitched_row = (Uint8 *) surface->pixels + (row-1) * surface->pitch;
+                    packed_row  = (Uint8 *) surface->pixels + (row-1) * png.width;
                     SDL_memmove(pitched_row, packed_row, png.width);
                 }
             }
@@ -344,9 +343,9 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 }
 
                 if (surface->pitch != surface->w) {
-                    for (row = png.height - 1; row >= 0; row --) {
-                        pitched_row = (Uint8 *) surface->pixels + row * surface->pitch;
-                        packed_row  = data + row * png.width;
+                    for (row = png.height; row > 0; row --) {
+                        pitched_row = (Uint8 *) surface->pixels + (row-1) * surface->pitch;
+                        packed_row  = data + (row-1) * png.width;
                         SDL_memcpy(pitched_row, packed_row, png.width);
                     }
                 } else {
