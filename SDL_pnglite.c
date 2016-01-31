@@ -124,6 +124,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
     int colorkey; /* -1 = none */
 
     if (src == NULL) {
+        SDL_SetError("Passed a NULL RWops");
         goto error;
     }
 
@@ -132,7 +133,8 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
     png_init(SDL_malloc, SDL_free);
 
     fp_offset = SDL_RWtell(src);
-    SDL_ClearError();
+    if (fp_offset == -1)
+        goto error;
 
     rv = png_open_read(&png, rwops_read_wrapper, src);
     if (rv != PNG_NO_ERROR) {
@@ -142,7 +144,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
 
     if (png.depth > 8) {
         /* support loading 16bpc by losing lsbs ? */
-        SDL_SetError("pnglite: %d bits per channel not supported", png.depth);
+        SDL_SetError("depth %d is not supported", png.depth);
         goto error;
     }
 
@@ -184,8 +186,6 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
             Bmask = 0x00FF0000;
             Amask = 0x00000000;
 #endif
-            bpp = 24;
-        /* have to memmove rows to account for the pitch */
             surface = SDL_CreateRGBSurface(0, png.width, png.height, 24,
                                            Rmask, Gmask, Bmask, Amask);
             if (!surface) {
@@ -272,7 +272,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
         case PNG_GREYSCALE_ALPHA:
             SDL_PixelFormatEnumToMasks(SDL_PIXELFORMAT_RGBA8888,
                             &bpp, &Rmask, &Gmask, &Bmask, &Amask);
-            surface = SDL_CreateRGBSurface(0, png.width, png.height, 32,
+            surface = SDL_CreateRGBSurface(0, png.width, png.height, bpp,
                                            Rmask, Gmask, Bmask, Amask);
             if (!surface) {
                 goto error;
@@ -320,7 +320,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
             if ((png.transparency_present) && (colorkey == -1)) {
                 SDL_PixelFormatEnumToMasks(SDL_PIXELFORMAT_RGBA8888,
                                 &bpp, &Rmask, &Gmask, &Bmask, &Amask);
-                surface = SDL_CreateRGBSurface(0, png.width, png.height, 32,
+                surface = SDL_CreateRGBSurface(0, png.width, png.height, bpp,
                                                Rmask, Gmask, Bmask, Amask);
                 if (!surface) {
                     goto error;
@@ -409,7 +409,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
     return (surface);
 }
 
-int
+static int
 SDL_SavePNG32_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
 {
     SDL_Surface *tmp = NULL;
@@ -423,15 +423,6 @@ SDL_SavePNG32_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
     Uint32 pitched_row_bytes;
     Uint32 colorkey;
     int transparency_present = 0;
-
-    /* this is perfectly safe to call multiple times
-       as long as parameters don't change */
-    png_init(SDL_malloc, SDL_free);
-
-    if (!src || !dst) {
-        SDL_SetError("EINVAL");
-        goto error;
-    }
 
     if (src->format->Amask > 0) {
         format = SDL_AllocFormat(
@@ -495,8 +486,11 @@ SDL_SavePNG32_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
         SDL_SetError("png_set_data(): %s", png_error_string(rv));
         goto error;
     }
-
+    rv = 0;
+    goto done;
   error:
+    rv = -1;
+  done:
     if (format) {
         SDL_FreeFormat(format);
     }
@@ -510,7 +504,7 @@ SDL_SavePNG32_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
         SDL_RWclose(dst);
     }
 
-    return SDL_strlen(SDL_GetError()) ? -1 : 0;
+    return rv;
 }
 
 int
@@ -521,6 +515,11 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
     png_t png;
     int transparency_present = 0;
     Uint32 colorkey;
+
+    if (!src || !dst) {
+        SDL_SetError("Passed a NULL Surface or RWops");
+        goto error;
+    }
 
     /* this is perfectly safe to call multiple times
        as long as parameters don't change */
@@ -538,6 +537,10 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
     }
 
     data = SDL_malloc(src->w * src->h);
+    if (!data) {
+        SDL_OutOfMemory();
+        goto error;
+    }
     ptr = data;
     pixels = src->pixels;
     for (j = 0; j < src->h ; j++)
@@ -654,14 +657,16 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
         goto error;
     }
 
+    rv = 0;
+    goto done;
   error:
-    if (data) {
+    rv = -1;
+  done:
+    if (data)
         SDL_free(data);
-    }
-    if (freedst && dst) {
+
+    if (freedst && dst)
         SDL_RWclose(dst);
-    }
 
-    return SDL_strlen(SDL_GetError()) ? -1 : 0;
-
+    return rv;
 }
