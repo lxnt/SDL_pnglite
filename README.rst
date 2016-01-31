@@ -165,6 +165,8 @@ Test image set:
 Known issues:
 -------------
 
+- SDL2 can have colorkeyed RGBA surfaces. PNG does not support colorkeys on RGBA data, thus
+  the colorkey is lost on save. Alternative would be to lose alpha channel on matching pixels.
 - ``IMG_LoadPNG_RW()`` sets number of palette entries directly. This cannot be done
   via SDL API (``SDL_AllocPalette()`` / ``SDL_SetSurfacePalette()``). Right now SDL_pnglite
   creates short palettes, otherwise test-suite will dutifully show palette mismatches.
