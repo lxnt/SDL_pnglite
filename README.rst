@@ -159,7 +159,8 @@ Test image set:
 
 - get PngSuite from http://www.schaik.com/pngsuite/
 - remove all 16bpp and interlaced images (``rm *16.png ???i*.png``)
-- submit the rest to the test suite:  ``./test-suite /path/to/subset/*.png``
+- submit the rest to the test suite:  ``./test-suite /path/to/pngsuite/*.png``
+- don't run ``test-suite`` in the PngSuite directory - it can overwrite test files.
 - files starting with 'x' are supposed to fail loading.
 
 Known issues:
