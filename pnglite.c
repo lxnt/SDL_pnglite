@@ -731,6 +731,7 @@ png_paeth_predictor(unsigned char a, unsigned char b, unsigned char c)
 static int
 png_filter(png_t* png, unsigned char* data)
 {
+    (void)(png); (void)(data);
     return PNG_NO_ERROR;
 }
 
