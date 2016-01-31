@@ -631,11 +631,7 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
     memset(png.palette, 255, 1024);
     png.palette_size = src->format->palette->ncolors;
     if (0 == SDL_GetColorKey(src, &colorkey)) {
-        if (((int)(colorkey + 1)) > src->format->palette->ncolors) {
-            /* well, duh. shouldn't happen though. */
-            goto error;
-        }
-        png.palette[4*i + 3] = 0;
+        png.palette[4*colorkey + 3] = 0;
         transparency_present = 1;
     }
 
