@@ -132,14 +132,17 @@ int compare_surfaces(const char *fname, SDL_Surface *si_surf, SDL_Surface *spl_s
     return rv;
 }
 
-int test_load(const char *fname) {
+int test_load(const char *fname, int expected_ok) {
     SDL_Surface *si_surf, *spl_surf;
     int rv = 0;
 
     spl_surf = SDL_LoadPNG(fname);
     if (NULL == spl_surf) {
-        printf("SDL_LoadPNG(%s): %s\n", fname , SDL_GetError());
-        return 1;
+        if (expected_ok) {
+            printf("SDL_LoadPNG(%s): %s\n", fname , SDL_GetError());
+            return 1;
+        }
+        return 0;
     }
 #if defined(LOUD)
 printf("w %d h %d pitch %d pf %s\n",
@@ -147,20 +150,22 @@ printf("w %d h %d pitch %d pf %s\n",
 #endif
     si_surf = IMG_Load(fname);
     if (NULL == si_surf) {
-        printf("IMG_Load(%s): %s\n", fname , SDL_GetError());
-        SDL_FreeSurface(spl_surf);
-        return 1;
+        if (expected_ok) {
+            printf("IMG_Load(%s): %s\n", fname , SDL_GetError());
+            SDL_FreeSurface(spl_surf);
+            return 1;
+        }
+        return 0;
     }
 
     rv += compare_surfaces(fname, si_surf, spl_surf);
 
     SDL_FreeSurface(si_surf);
     SDL_FreeSurface(spl_surf);
-
-    return rv;
+    return expected_ok ? rv : 0;
 }
 
-int test_save(const char *fname) {
+int test_save(const char *fname, int expected_ok) {
     SDL_Surface *si_surf = NULL, *spl_surf = NULL;
     SDL_RWops *rwo = NULL;
     void *rwo_buf = NULL;
@@ -170,13 +175,19 @@ int test_save(const char *fname) {
 
     spl_surf = SDL_LoadPNG(fname);
     if (NULL == spl_surf) {
-        printf("SDL_LoadPNG(%s): %s\n", fname , SDL_GetError());
+        if (expected_ok)
+            printf("SDL_LoadPNG(%s): %s\n", fname , SDL_GetError());
         rv = 1;
         goto exit;
     }
 #if defined(LOUD)
-printf("w %d h %d pitch %d pf %s\n",
-    spl_surf->w, spl_surf->h, spl_surf->pitch, SDL_GetPixelFormatName(spl_surf->format->format));
+    {
+        Uint32 colorkey = 0;
+        SDL_GetColorKey(spl_surf, &colorkey);
+        printf("%s/spl: w %d h %d pitch %d pf %s ck %x\n", fname,
+            spl_surf->w, spl_surf->h, spl_surf->pitch,
+            SDL_GetPixelFormatName(spl_surf->format->format), colorkey);
+    }
 #endif
     rwo_buf = SDL_malloc(rwo_buf_sz);
     if (NULL == rwo_buf) {
@@ -219,50 +230,45 @@ printf("w %d h %d pitch %d pf %s\n",
         SDL_FreeSurface(spl_surf);
     if (si_surf)
         SDL_FreeSurface(si_surf);
-    return rv;
+    return expected_ok ? rv : 0;
 }
 
-int gotta_fail(const char *fn) {
+int expected_ok(const char *fn) {
     char *fncopy, *bn;
     int rv;
 
     fncopy = strdup(fn);
     bn = basename(fncopy);
 
-    rv = (bn[0] == 'x');
+    rv = (bn[0] != 'x');
     free(fncopy);
     return rv;
 }
 
 int main(int argc, char *argv[]) {
-    int fails, i;
+    int i, fails;
     char *fname;
 
+    printf("=== TEST LOAD =====================================\n");
     for (i = 1; i < argc; i++) {
         fname = argv[i];
-        fails = test_load(fname);
-        if (fails == 0) {
-            if (gotta_fail(fname)) {
-                printf("%s: loaded corrupted file.\n", fname);
-            } else {
-                printf("%s: OK\n", fname);
-            }
-        }
+        fails = test_load(fname, expected_ok(fname));
+#if defined(LOUD)
+        if (fails == 0)
+            printf("%s: OK\n", fname);
+#endif
     }
-    printf("========================================\n");
+    printf("=== TEST SAVE =====================================\n");
     for (i = 1; i < argc; i++) {
         fname = argv[i];
-        fails = test_save(fname);
-        if (fails == 0) {
-            if (gotta_fail(fname)) {
-                printf("%s: loaded corrupted file.\n", fname);
-            } else {
-                printf("%s: OK\n", fname);
-            }
-        }
+        fails = test_save(fname, expected_ok(fname));
+#if defined(LOUD)
+        if (fails == 0)
+            printf("%s: OK\n", fname);
+#endif
     }
     IMG_Quit();
     SDL_Quit();
-    return 0;
+    return fails;
 }
 
