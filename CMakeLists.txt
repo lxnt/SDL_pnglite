@@ -22,6 +22,11 @@ if (CMAKE_HOST_UNIX)
   endif(PKG_SDL2IMAGE_FOUND)
 endif(CMAKE_HOST_UNIX)
 
+if (MSVC)
+# disable fopen_s warning
+  add_definitions(-D_SCL_SECURE_NO_WARNINGS)
+endif(MSVC)
+
 add_library(SDL_pnglite STATIC SDL_pnglite.c pnglite.c)
 install(TARGETS SDL_pnglite ARCHIVE DESTINATION lib)
 install(FILES  SDL_pnglite.h DESTINATION include/SDL2)
