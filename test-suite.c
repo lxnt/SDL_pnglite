@@ -112,11 +112,11 @@ int compare_surfaces(const char *fname, SDL_Surface *si_surf, SDL_Surface *spl_s
                 fails += 1;
                 printf("spl: ");
                 for(j=0; j<spl_surf->pitch; j++)
-                    printf("%hhx ", *(spl_row + i*spl_surf->pitch + j));
+                    printf("%02x ", (unsigned) (*(spl_row + i*spl_surf->pitch + j)));
                 printf("\n");
                 printf("si: ");
                 for(j=0; j<si_surf->pitch; j++)
-                    printf("%hhx ", *(si_row + i*si_surf->pitch + j));
+                    printf("%02x ", (unsigned) (*(si_row + i*si_surf->pitch + j)));
                 printf("\n");
             }
         }
