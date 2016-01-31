@@ -1,29 +1,51 @@
 #include <stdio.h>
 #include <string.h>
-#include <libgen.h>
 #include "SDL.h"
 #include "SDL_pnglite.h"
 #include "SDL_image.h"
 
-#define DUMP
-void dump_rwo(const char *fname, const void *rwo_buf, SDL_RWops *rwo, const size_t sz) {
-#if defined(DUMP)
+#if defined(_MSC_VER)
+# include <stdlib.h>
+char *get_basename(const char *fname, char *buf) {
+    char ext[FILENAME_MAX + 1];
+    strcpy(buf, fname);
+    ext[0] = 0;
+    _splitpath(fname, NULL, NULL, buf, ext);
+    strcpy(buf + strlen(buf), ext);
+    return buf;
+}
+#else
+# include <libgen.h>
+char *get_basename(const char *fname, char *buf) {
+    strcpy(buf, fname);
+    return basename(buf);
+}
+#endif
+
+
+void dump_buf(const char *fname, const void *rwo_buf, const Sint64 sz) {
     FILE *fp;
-    char *fncopy, *bn;
-    printf("rwo: size=%d len=%d\n", (int)SDL_RWsize(rwo), (int)sz);
-    fncopy = strdup(fname);
-    bn = basename(fncopy);
+    char buf[FILENAME_MAX + 1], *bn;
+
+    bn = get_basename(fname, buf);
     if (NULL != (fp = fopen(bn, "w"))) {
-        fwrite(rwo_buf, sz, 1, fp);
+        fwrite(rwo_buf, (size_t)sz, 1, fp);
         fclose(fp);
         printf("wrote %s\n", bn);
     } else {
         printf("can't write %s\n", bn);
     }
-    /* exit(1); */
-#else
-    rwo += sz;
-#endif
+}
+
+int expected_ok(const char *fname) {
+    char buf[FILENAME_MAX + 1], *bn;
+
+    bn = get_basename(fname, buf);
+    if ( (bn[0] == 'x')
+      || (NULL != strstr(bn, "16.png"))
+      || (NULL != strchr(bn, 'i')) )
+        return 0;
+    return 1;
 }
 
 int compare_surfaces(const char *fname, SDL_Surface *si_surf, SDL_Surface *spl_surf) {
@@ -171,7 +193,7 @@ int test_save(const char *fname, int expected_ok) {
     void *rwo_buf = NULL;
     const int rwo_buf_sz = 1048576;
     int rv = 0;
-    size_t sz;
+    Sint64 sz;
 
     spl_surf = SDL_LoadPNG(fname);
     if (NULL == spl_surf) {
@@ -212,14 +234,14 @@ int test_save(const char *fname, int expected_ok) {
     si_surf = IMG_LoadPNG_RW(rwo);
     if (NULL == si_surf) {
         printf("IMG_Load(%s): %s\n", fname , SDL_GetError());
-        dump_rwo(fname, rwo_buf, rwo, sz);
+        dump_buf(fname, rwo_buf, sz);
         rv = 1;
         goto exit;
     }
 
     rv += compare_surfaces(fname, si_surf, spl_surf);
     if (rv)
-        dump_rwo(fname, rwo_buf, rwo, sz);
+        dump_buf(fname, rwo_buf, sz);
 
   exit:
     if (rwo)
@@ -233,20 +255,8 @@ int test_save(const char *fname, int expected_ok) {
     return expected_ok ? rv : 0;
 }
 
-int expected_ok(const char *fn) {
-    char *fncopy, *bn;
-    int rv;
-
-    fncopy = strdup(fn);
-    bn = basename(fncopy);
-
-    rv = (bn[0] != 'x');
-    free(fncopy);
-    return rv;
-}
-
 int main(int argc, char *argv[]) {
-    int i, fails;
+    int i, fails = 0;
     char *fname;
 
     printf("=== TEST LOAD =====================================\n");
@@ -268,6 +278,9 @@ int main(int argc, char *argv[]) {
 #endif
     }
     IMG_Quit();
+#if defined(_MSC_VER)
+    SDL_Delay(100500);
+#endif
     SDL_Quit();
     return fails;
 }

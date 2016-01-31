@@ -111,9 +111,9 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
     Uint32 Gmask = 0;
     Uint32 Bmask = 0;
     Uint32 Amask = 0;
-    Uint32 row, col;
+    Uint64 row, col;
     Uint8 index;
-    Uint32 gray_level;
+    Uint8 gray_level;
     Uint8 alpha;
     Uint64 pixel; /* what if we get 3-gigapixel PNG ? */
     Uint8 *pitched_row;
@@ -245,12 +245,14 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 }
             }
 
-            for (col = 0; col < 256; col++) {
-                colorset[col].r = col;
-                colorset[col].g = col;
-                colorset[col].b = col;
-                colorset[col].a = 255;
-            }
+			gray_level = 0;
+            do {
+                colorset[gray_level].r = gray_level;
+                colorset[gray_level].g = gray_level;
+                colorset[gray_level].b = gray_level;
+                colorset[gray_level].a = 255;
+                gray_level += 1;
+            } while (gray_level > 0);
 
             if (NULL == (palette = SDL_AllocPalette(256)))
                 goto error;
