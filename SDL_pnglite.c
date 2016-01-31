@@ -23,7 +23,7 @@
 #include "SDL_video.h"
 #include "SDL_endian.h"
 #include "SDL_pixels.h"
-/*#include "SDL_error.h"*/
+#include "SDL_stdinc.h"
 
 #include "pnglite.h"
 
@@ -347,10 +347,10 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                     for (row = png.height - 1; row >= 0; row --) {
                         pitched_row = (Uint8 *) surface->pixels + row * surface->pitch;
                         packed_row  = data + row * png.width;
-                        SDL_memmove(pitched_row, packed_row, png.width);
+                        SDL_memcpy(pitched_row, packed_row, png.width);
                     }
                 } else {
-                    SDL_memmove(surface->pixels, data, surface->w * surface->h);
+                    SDL_memcpy(surface->pixels, data, surface->w * surface->h);
                 }
 
                 for (col = 0; col < 256; col++) {
@@ -360,7 +360,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                     colorset[col].a = 255;
                 }
 #if !defined(USE_PALETTE_API)
-                memcpy(surface->format->palette->colors, colorset,
+                SDL_memcpy(surface->format->palette->colors, colorset,
                                 png.palette_size * sizeof(SDL_Color));
                 surface->format->palette->ncolors = png.palette_size;
 #else
@@ -478,7 +478,7 @@ SDL_SavePNG32_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
     }
     /* now get rid of pitch */
     for(i = 0; i < tmp->h ; i++) {
-        SDL_memmove(data + unpitched_row_bytes * i,
+        SDL_memcpy(data + unpitched_row_bytes * i,
                     (Uint8 *) tmp->pixels + pitched_row_bytes *i,
                     pitched_row_bytes);
     }
@@ -628,7 +628,7 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
             }
         }
 
-    memset(png.palette, 255, 1024);
+    SDL_memset(png.palette, 255, 1024);
     png.palette_size = src->format->palette->ncolors;
     if (0 == SDL_GetColorKey(src, &colorkey)) {
         png.palette[4*colorkey + 3] = 0;
