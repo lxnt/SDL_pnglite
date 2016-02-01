@@ -245,7 +245,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 }
             }
 
-			gray_level = 0;
+            gray_level = 0;
             do {
                 colorset[gray_level].r = gray_level;
                 colorset[gray_level].g = gray_level;

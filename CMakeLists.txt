@@ -3,6 +3,12 @@ project(sdl_pnglite)
 
 set(HAVE_SDLIMAGE2 OFF)
 
+option(BUILD_SHARED_LIBS "Build Shared Library" OFF)
+set(LIB_TYPE STATIC)
+if(BUILD_SHARED_LIBS)
+  set(LIB_TYPE SHARED)
+endif(BUILD_SHARED_LIBS)
+
 if (CMAKE_HOST_UNIX)
   set(ENV{PKG_CONFIG_PATH} "${CMAKE_INSTALL_PREFIX}/lib/pkgconfig/")
 
@@ -25,11 +31,11 @@ if (MSVC)
   add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 
   set(PKG_SDL2_INCLUDE_DIRS "" CACHE PATH "Location of SDL2 include files")
-  set(PKG_SDL2_LIBRARY_DIRS "/none" CACHE PATH "Location of SDL2 library files")
-  set(PKG_SDL2IMAGE_INCLUDE_DIRS "/none" CACHE PATH "Location of SDL2_image include files")
-  set(PKG_SDL2IMAGE_LIBRARY_DIRS "/none" CACHE PATH "Location of SDL2_image library files")
-  set(PKG_ZLIB_INCLUDE_DIRS "/none" CACHE PATH "Location of zlib include files")
-  set(PKG_ZLIB_LIBRARY_DIRS "/none" CACHE PATH "Location of zlib library files")
+  set(PKG_SDL2_LIBRARY_DIRS "" CACHE PATH "Location of SDL2 library files")
+  set(PKG_SDL2IMAGE_INCLUDE_DIRS "" CACHE PATH "Location of SDL2_image include files")
+  set(PKG_SDL2IMAGE_LIBRARY_DIRS "" CACHE PATH "Location of SDL2_image library files")
+  set(PKG_ZLIB_INCLUDE_DIRS "" CACHE PATH "Location of zlib include files")
+  set(PKG_ZLIB_LIBRARY_DIRS "" CACHE PATH "Location of zlib library files")
 
   set(PKG_SDL2_LIBRARIES SDL2 SDL2main)
   set(PKG_SDL2IMAGE_LIBRARIES SDL2_image)
@@ -39,7 +45,7 @@ endif(MSVC)
 include_directories(${PKG_SDL2_INCLUDE_DIRS} ${PKG_SDL2IMAGE_INCLUDE_DIRS} ${PKG_ZLIB_INCLUDE_DIRS} )
 link_directories(${PKG_SDL2_LIBRARY_DIRS} ${PKG_SDL2IMAGE_LIBRARY_DIRS} ${PKG_ZLIB_LIBRARY_DIRS} )
 
-add_library(SDL_pnglite STATIC SDL_pnglite.c pnglite.c)
+add_library(SDL_pnglite ${LIB_TYPE} SDL_pnglite.c pnglite.c)
 target_link_libraries(SDL_pnglite PRIVATE ${PKG_SDL2_LIBRARIES} ${PKG_ZLIB_LIBRARIES})
 
 install(TARGETS SDL_pnglite ARCHIVE DESTINATION lib)
