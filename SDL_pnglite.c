@@ -26,6 +26,7 @@
 #include "SDL_stdinc.h"
 
 #include "pnglite.h"
+#include "SDL_pnglite.h"
 
 static unsigned
 rwops_read_wrapper(void* buf, size_t size, size_t num, void* baton)
