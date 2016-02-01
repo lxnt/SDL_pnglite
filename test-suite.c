@@ -4,7 +4,7 @@
 #include "SDL_pnglite.h"
 #include "SDL_image.h"
 
-#if defined(_MSC_VER)
+#if defined(_WIN32)
 # include <stdlib.h>
 char *get_basename(const char *fname, char *buf) {
     char ext[FILENAME_MAX + 1];
@@ -278,7 +278,7 @@ int main(int argc, char *argv[]) {
 #endif
     }
     IMG_Quit();
-#if defined(_MSC_VER)
+#if defined(_WIN32)
     SDL_Delay(100500);
 #endif
     SDL_Quit();
