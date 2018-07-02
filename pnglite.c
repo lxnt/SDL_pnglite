@@ -927,17 +927,19 @@ png_set_data(png_t* png, unsigned width, unsigned height, char depth,
     png_filter(png, filtered);
     png_write_ihdr(png);
 
-    if (png->color_type == PNG_INDEXED)
+    if (png->color_type == PNG_INDEXED) {
         if ((err = png_write_plte(png))) {
             png_free(filtered);
             return err;
         }
+    }
 
-    if (transparency)
+    if (transparency) {
         if ((err = png_write_trns(png))) {
             png_free(filtered);
             return err;
         }
+    }
 
     png_write_idats(png, filtered);
     png_free(filtered);
