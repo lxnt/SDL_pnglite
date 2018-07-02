@@ -451,6 +451,12 @@ png_write_idats(png_t* png, unsigned char* data)
 
     size = 8 + compressBound(png->height * png->pitch) + 4;
     idat = png_alloc(size);
+
+    if (!idat) {
+        err = PNG_MEMORY_ERROR;
+        goto done;
+    }
+
     memcpy(idat + 4, "IDAT", 4);
 
     written = size - 12;
@@ -522,7 +528,8 @@ png_read_idat(png_t* png, unsigned firstlen)
 
         result = png_inflate(png, chunk, length);
 
-        if(result != PNG_NO_ERROR) break;
+        if (result != PNG_NO_ERROR)
+            break;
 
         if ((result = file_read_ul(png, &length)) != PNG_NO_ERROR)
             break;
@@ -530,6 +537,10 @@ png_read_idat(png_t* png, unsigned firstlen)
         if(length > old_len) {
             png_free(chunk);
             chunk = png_alloc(length);
+            if (!chunk) {
+                result = PNG_MEMORY_ERROR;
+                break;
+            }
             old_len = length;
         }
 
@@ -957,7 +968,7 @@ char* png_error_string(int error)
     case PNG_HEADER_ERROR:
         return "No PNG header found. Are you sure this is a PNG?";
     case PNG_IO_ERROR:
-        return "Failure while reading file.";
+        return "Failure while reading/writing file.";
     case PNG_EOF_ERROR:
         return "Reached end of file.";
     case PNG_CRC_ERROR:

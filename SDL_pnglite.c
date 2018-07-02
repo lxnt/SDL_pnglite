@@ -461,6 +461,8 @@ SDL_SavePNG32_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
             png.colorkey[4] = 0;
             transparency_present = 1;
         }
+    } else {
+          SDL_ClearError();
     }
     unpitched_row_bytes = tmp->w * tmp->format->BytesPerPixel;
     pitched_row_bytes = tmp->pitch;
@@ -540,7 +542,7 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
 
     data = SDL_malloc(src->w * src->h);
     if (!data) {
-        SDL_OutOfMemory();
+        SDL_Error(SDL_ENOMEM);
         goto error;
     }
     ptr = data;
@@ -638,6 +640,8 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
     if (0 == SDL_GetColorKey(src, &colorkey)) {
         png.palette[4*colorkey + 3] = 0;
         transparency_present = 1;
+    } else {
+        SDL_ClearError();
     }
 
     for (i = 0; i < src->format->palette->ncolors ; i++) {
@@ -649,13 +653,21 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
     /* write out and be done */
     rv = png_open_write(&png, rwops_write_wrapper, dst);
     if (rv != PNG_NO_ERROR) {
-        SDL_SetError("png_open_write(): %s", png_error_string(rv));
+        if (rv == PNG_MEMORY_ERROR) {
+            SDL_Error(SDL_ENOMEM);
+        } else if (rv != PNG_IO_ERROR) {
+            SDL_SetError("png_open_write(): %s", png_error_string(rv));
+        }
         goto error;
     }
 
     rv = png_set_data(&png, src->w, src->h, 8, PNG_INDEXED, transparency_present, data);
     if (rv != PNG_NO_ERROR) {
-        SDL_SetError("png_set_data(): %s", png_error_string(rv));
+        if (rv == PNG_MEMORY_ERROR) {
+            SDL_Error(SDL_ENOMEM);
+        } else if (rv != PNG_IO_ERROR) {
+            SDL_SetError("png_open_write(): %s", png_error_string(rv));
+        }
         goto error;
     }
 
