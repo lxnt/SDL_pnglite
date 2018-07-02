@@ -512,7 +512,7 @@ SDL_SavePNG32_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
 int
 SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
 {
-    Uint8 *data, *ptr, *pixels;
+    Uint8 *data = NULL, *ptr, *pixels;
     int i, j, rv;
     png_t png;
     int transparency_present = 0;
