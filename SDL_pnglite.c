@@ -51,7 +51,13 @@ rwops_write_wrapper(void* buf, size_t size, size_t num, void* baton)
     if (!buf)
         return 0;
 
-    return SDL_RWwrite(rwops, buf, size, num);
+    size_t rv = SDL_RWwrite(rwops, buf, size, num);
+
+    /* work around PySDL2's bug */
+    if (rv > num)
+        return rv/size;
+    else
+        return rv;
 }
 
 static unsigned char
