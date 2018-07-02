@@ -19,7 +19,7 @@ if (CMAKE_HOST_UNIX)
 
   include(FindPkgConfig)
   pkg_check_modules(PKG_SDL2 REQUIRED sdl2)
-  pkg_check_modules(PKG_SDL2 REQUIRED zlib)
+  pkg_check_modules(PKG_ZLIB REQUIRED zlib)
   pkg_check_modules(PKG_SDL2IMAGE SDL2_image)
   if (PKG_SDL2IMAGE_FOUND)
     set(HAVE_SDLIMAGE2 ON)
@@ -48,7 +48,11 @@ link_directories(${PKG_SDL2_LIBRARY_DIRS} ${PKG_SDL2IMAGE_LIBRARY_DIRS} ${PKG_ZL
 add_library(SDL_pnglite ${LIB_TYPE} SDL_pnglite.c pnglite.c)
 target_link_libraries(SDL_pnglite PRIVATE ${PKG_SDL2_LIBRARIES} ${PKG_ZLIB_LIBRARIES})
 
-install(TARGETS SDL_pnglite ARCHIVE DESTINATION lib)
+if(BUILD_SHARED_LIBS)
+  install(TARGETS SDL_pnglite LIBRARY DESTINATION lib)
+else()
+  install(TARGETS SDL_pnglite ARCHIVE DESTINATION lib)
+endif()
 install(FILES  SDL_pnglite.h DESTINATION include/SDL2)
 
 option(BUILD_TEST_SUITE "Build test-suite" ${HAVE_SDLIMAGE2})
