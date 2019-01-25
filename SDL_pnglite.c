@@ -583,7 +583,7 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
                             *ptr = (*(pixels + src->pitch*j + i/8) & 0x80 ) >> 7;
                             ptr += 1;
                             break;
-                    }
+                    } break;
                 case SDL_PIXELFORMAT_INDEX1MSB:
                     switch (i%8) {
                         case 0:
@@ -611,7 +611,7 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
                             *ptr = *(pixels + src->pitch*j + i/8) & 0x01;
                             ptr += 1;
                             break;
-                    }
+                    } break;
                 case SDL_PIXELFORMAT_INDEX4LSB:
                     switch (i%2) {
                         case 0:
@@ -621,7 +621,7 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
                            *ptr = (*(pixels + src->pitch*j + i/8) & 0xf0) >> 4;
                             ptr += 1;
                             break;
-                    }
+                    } break;
                 case SDL_PIXELFORMAT_INDEX4MSB:
                     switch (i%2) {
                         case 0:
@@ -631,7 +631,7 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
                            *ptr = *(pixels + src->pitch*j + i/8) & 0x0f;
                             ptr += 1;
                             break;
-                    }
+                    } break;
                 case SDL_PIXELFORMAT_INDEX8:
                     *ptr = pixels[i + j*src->pitch];
                     ptr += 1;
