@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8)
-project(sdl_pnglite)
+project(SDL_PNGLITE C)
 
 set(HAVE_SDLIMAGE2 OFF)
 
@@ -8,6 +8,14 @@ set(LIB_TYPE STATIC)
 if(BUILD_SHARED_LIBS)
   set(LIB_TYPE SHARED)
 endif(BUILD_SHARED_LIBS)
+
+if(NOT (WINDOWS OR CYGWIN))
+  set(prefix ${CMAKE_INSTALL_PREFIX})
+  set(exec_prefix "\${prefix}")
+  set(libdir "\${exec_prefix}/lib${LIB_SUFFIX}")
+  set(bindir "\${exec_prefix}/bin")
+  set(includedir "\${prefix}/include")
+endif()
 
 if (CMAKE_HOST_UNIX)
   set(ENV{PKG_CONFIG_PATH} "${CMAKE_INSTALL_PREFIX}/lib/pkgconfig/")
@@ -42,6 +50,8 @@ if (MSVC)
   set(PKG_ZLIB_LIBRARIES zdll)
 endif(MSVC)
 
+configure_file("${SDL_PNGLITE_SOURCE_DIR}/sdl_pnglite.pc.in" "${SDL_PNGLITE_BINARY_DIR}/sdl_pnglite.pc" @ONLY)
+
 include_directories(${PKG_SDL2_INCLUDE_DIRS} ${PKG_SDL2IMAGE_INCLUDE_DIRS} ${PKG_ZLIB_INCLUDE_DIRS} )
 link_directories(${PKG_SDL2_LIBRARY_DIRS} ${PKG_SDL2IMAGE_LIBRARY_DIRS} ${PKG_ZLIB_LIBRARY_DIRS} )
 
@@ -63,3 +73,13 @@ if (BUILD_TEST_SUITE)
     set_target_properties(pnglite-test PROPERTIES LINK_FLAGS "setargv.obj")
   endif(MSVC)
 endif(BUILD_TEST_SUITE)
+
+if(NOT (WINDOWS OR CYGWIN))
+  if(FREEBSD)
+    # FreeBSD uses ${PREFIX}/libdata/pkgconfig
+    install(FILES ${SDL_PNGLITE_BINARY_DIR}/sdl_pnglite.pc DESTINATION "libdata/pkgconfig")
+  else()
+    install(FILES ${SDL_PNGLITE_BINARY_DIR}/sdl_pnglite.pc
+      DESTINATION "lib${LIB_SUFFIX}/pkgconfig")
+  endif()
+endif()
