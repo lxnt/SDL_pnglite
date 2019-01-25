@@ -41,8 +41,8 @@ extern "C" {
     Negative numbers are error codes and 0 and up are okay responses. */
 enum
 {
-    PNG_DONE                = 1,
-    PNG_NO_ERROR            = 0,
+    PNG_DONE                =  1,
+    PNG_NO_ERROR            =  0,
     PNG_FILE_ERROR          = -1,
     PNG_HEADER_ERROR        = -2,
     PNG_IO_ERROR            = -3,
@@ -51,9 +51,11 @@ enum
     PNG_MEMORY_ERROR        = -6,
     PNG_ZLIB_ERROR          = -7,
     PNG_UNKNOWN_FILTER      = -8,
-    PNG_NOT_SUPPORTED       = -9,
-    PNG_WRONG_ARGUMENTS     = -10,
-    PNG_CORRUPTED           = -11
+    PNG_UNKNOWN_TRNS        = -9,
+    PNG_NOT_SUPPORTED_16    = -10,
+    PNG_CORRUPTED           = -11,
+	PNG_WRONG_ARGUMENTS     = -12,
+    PNG_NOT_SUPPORTED_INT   = -13
 };
 
 /* The five different kinds of color storage in PNG files. */

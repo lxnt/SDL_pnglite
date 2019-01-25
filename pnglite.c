@@ -132,7 +132,7 @@ png_check_png(png_t* png)
     case 8:
         break;
     case 16:
-        return PNG_NOT_SUPPORTED;
+        return PNG_NOT_SUPPORTED_16;
     default:
         return PNG_CORRUPTED;
     }
@@ -161,7 +161,7 @@ png_check_png(png_t* png)
     png->pitch = pot_align(png->width * png->depth * channels[png->color_type], 3) >> 3;
 
     if(png->interlace_method)
-        return PNG_NOT_SUPPORTED;
+        return PNG_NOT_SUPPORTED_INT;
 
     return PNG_NO_ERROR;
 }
@@ -709,7 +709,7 @@ static int png_write_trns(png_t *png)
         break;
 
     default:
-        return PNG_NOT_SUPPORTED;
+        return PNG_UNKNOWN_TRNS;
     }
     memmove(trns + 4, "tRNS", 4);
     set_ul(trns, length);
@@ -923,8 +923,9 @@ png_set_data(png_t* png, unsigned width, unsigned height, char depth,
     png->interlace_method = 0;
     png->compression_method = 0;
 
-    if (png_check_png(png) || (png->depth != 8))
-        return PNG_NOT_SUPPORTED;
+    int rv_pcp = png_check_png(png);
+    if (rv_pcp)
+        return rv_pcp;
 
     filtered = png_alloc((png->pitch + 1) * height);
     if (!filtered)
@@ -966,7 +967,7 @@ char* png_error_string(int error)
     case PNG_FILE_ERROR:
         return "Unknown file error.";
     case PNG_HEADER_ERROR:
-        return "No PNG header found. Are you sure this is a PNG?";
+        return "No PNG header found.";
     case PNG_IO_ERROR:
         return "Failure while reading/writing file.";
     case PNG_EOF_ERROR:
@@ -981,8 +982,12 @@ char* png_error_string(int error)
         return "Unknown filter method used in scanline.";
     case PNG_DONE:
         return "PNG done";
-    case PNG_NOT_SUPPORTED:
-        return "The PNG is unsupported by pnglite, too bad for you!";
+    case PNG_NOT_SUPPORTED_16:
+        return "16 bit-per channel PNGs are not supported.";
+    case PNG_UNKNOWN_TRNS:
+        return "Unsupported transparency mode.";
+    case PNG_NOT_SUPPORTED_INT:
+        return "Interlaced PNGs are not supported by pnglite.";
     case PNG_WRONG_ARGUMENTS:
         return "Wrong combination of arguments passed to png_open. You must"
                " use either a read_function or supply a file pointer to use.";
