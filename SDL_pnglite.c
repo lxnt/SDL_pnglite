@@ -28,7 +28,7 @@
 #include "pnglite.h"
 #include "SDL_pnglite.h"
 
-static unsigned
+static size_t
 rwops_read_wrapper(void* buf, size_t size, size_t num, void* baton)
 {
     SDL_RWops *rwops = (SDL_RWops *) baton;
@@ -43,7 +43,7 @@ rwops_read_wrapper(void* buf, size_t size, size_t num, void* baton)
     return SDL_RWread(rwops, buf, size, num);
 }
 
-static unsigned
+static size_t
 rwops_write_wrapper(void* buf, size_t size, size_t num, void* baton)
 {
     SDL_RWops *rwops = (SDL_RWops *) baton;
@@ -135,8 +135,9 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
     }
 
     /* this is perfectly safe to call multiple times
-       as long as parameters don't change */
-    png_init(SDL_malloc, SDL_free);
+       as long as parameters don't change while there are
+       initialized png_t-s? yup. better fix this somehow. */
+    png_init(SDL_malloc, SDL_free, 1<<30, 1<<30);
 
     fp_offset = SDL_RWtell(src);
     if (fp_offset == -1)
@@ -287,7 +288,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
             }
             /*  grayscale+alpha is always 2 bytes per pixel,
                 so png.pitch is the right value */
-            data = SDL_malloc(png.width * png.pitch);
+            data = SDL_malloc(png.height * png.pitch);
             if (!data) {
                 SDL_OutOfMemory();
                 goto error;
@@ -533,7 +534,7 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
 
     /* this is perfectly safe to call multiple times
        as long as parameters don't change */
-    png_init(SDL_malloc, SDL_free);
+    png_init(SDL_malloc, SDL_free, 1<<30, 1<<30);
 
     switch (src->format->format) {
         case SDL_PIXELFORMAT_INDEX1LSB:

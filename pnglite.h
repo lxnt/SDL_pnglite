@@ -51,11 +51,12 @@ enum
     PNG_MEMORY_ERROR        = -6,
     PNG_ZLIB_ERROR          = -7,
     PNG_UNKNOWN_FILTER      = -8,
-    PNG_UNKNOWN_TRNS        = -9,
+    PNG_TRNS_WRONG_COLORTYPE = -9,
     PNG_NOT_SUPPORTED_16    = -10,
     PNG_CORRUPTED           = -11,
-	PNG_WRONG_ARGUMENTS     = -12,
-    PNG_NOT_SUPPORTED_INT   = -13
+    PNG_WRONG_ARGUMENTS     = -12,
+    PNG_IMAGE_TOO_BIG       = -13,
+    PNG_OVERSIZE_CHUNK      = -14
 };
 
 /* The five different kinds of color storage in PNG files. */
@@ -77,8 +78,8 @@ enum {
 };
 
 /* Typedefs for callbacks. */
-typedef unsigned (*png_write_callback_t)(void* input, size_t size, size_t numel, void* user_pointer);
-typedef unsigned (*png_read_callback_t)(void* output, size_t size, size_t numel, void* user_pointer);
+typedef size_t (*png_write_callback_t)(void* input, size_t size, size_t numel, void* user_pointer);
+typedef size_t (*png_read_callback_t)(void* output, size_t size, size_t numel, void* user_pointer);
 typedef void (*png_free_t)(void* p);
 typedef void * (*png_alloc_t)(size_t s);
 
@@ -123,7 +124,7 @@ typedef struct {
  *       Always returns PNG_NO_ERROR.
  */
 
-int png_init(png_alloc_t pngalloc, png_free_t pngfree);
+int png_init(png_alloc_t pngalloc, png_free_t pngfree, unsigned chunk_size_limit, unsigned image_size_limit);
 
 /*
     Function: png_open_file

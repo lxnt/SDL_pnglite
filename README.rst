@@ -3,21 +3,27 @@ libpnglite with indexed color types support
 
 http://www.w3.org/TR/PNG/
 
+Each push is tested against the PngSuite and Google Image Test Suite 1.01.
 
-**Caution:** do not use this to read unstrusted data - PNG files you did not author, recompress, optimize or test yourself.
-
+Two images of the latter do cause libpng 1.6.34 to enter endless loop,
+while this library correctly reports them as broken.
 
 Reading:
 ========
 
 
-PNG interlacing and ancillary chunks
-------------------------------------
-
-Interlacing is not supported. Attempt to read interlaced image file will fail.
+PNG ancillary chunks
+--------------------
 
 Of ancillary chunks only tRNS is parsed. Others are silently ignored.
 No access to them is provided.
+
+
+Image and chunk sizes
+---------------------
+
+By default, maximum size of parsed chunks and maximum size
+of resulting image data not counting palette is limited to 1<<30 bytes.
 
 
 PNG per-channel depth
@@ -26,6 +32,9 @@ PNG per-channel depth
 Everything that's less than 8 bits is expanded to 8 bits.
 
 16 bit per channel images are not supported.
+
+Reason for not supporting: SDL does not support 16bit depth anyway, and
+the possible colorkey becomes ambigous.
 
 
 PNG color types and transparency:
@@ -107,7 +116,7 @@ SDL_LoadPNG() / SDL_LoadPNG_RW():
 
 - Attempts to load a png from given filename / RWops object.
 - Indexed-color images without transparency are returned as paletted surfaces.
-- Indexed-color images with transparency are returned as paletted surfaces with colorkey 
+- Indexed-color images with transparency are returned as paletted surfaces with colorkey
   if and only if the transparency chunks marks exacly one color as fully transparent, and
   all others as fully opaque. Otherwise they are returned as RGBA32.
 - Truecolor+alpha and grayscale+alpha are returned as RGBA32.
@@ -158,10 +167,12 @@ Test image set:
 ---------------
 
 - get PngSuite from http://www.schaik.com/pngsuite/
-- remove all 16bpp and interlaced images (``rm *16.png ???i*.png``)
+- google up the Google Image Test Suite PNG part.
 - submit the rest to the test suite:  ``./test-suite /path/to/pngsuite/*.png``
-- don't run ``test-suite`` in the PngSuite directory - it can overwrite test files.
-- files starting with 'x' are supposed to fail loading.
+- remove or rename images ``m1-71915ab0b1cc7350091ef7073a312d16.png`` and ``m1-7dc9db3d3e510156c619273f8f913cbe.png``
+  to something not ending in .png or this won't end well.
+- submit the rest to the test suite:  ``./test-suite /path/to/googlesuite/*.png``
+- valgrind it, read the code, etc.
 
 Known issues:
 -------------
@@ -172,23 +183,6 @@ Known issues:
   via SDL API (``SDL_AllocPalette()`` / ``SDL_SetSurfacePalette()``). Right now SDL_pnglite
   creates short palettes, otherwise test-suite will dutifully show palette mismatches.
 - ``tbbn0g04.png: pixel format mismatch spl SDL_PIXELFORMAT_INDEX8 si SDL_PIXELFORMAT_RGB565``
-  reason is libpng12 returns 2 channels and bit_depth of 8 for this image (no idea why, it's 4bit),
-  then num_channels*bit_depth is used as bpp in ``SDL_CreateRGBSurface()``. This is a bug.
+  reason is libpng 1.6 returns 2 channels and bit_depth of 8 for this image (no idea why, it's 4bit),
+  then num_channels*bit_depth is used as bpp in ``SDL_CreateRGBSurface()``. This is a SDL_Image's  bug.
 - Also, ``IMG_LoadPNG_RW()`` incorrectly sets greyscale/rgb colorkeys. How this doesn't show up in tests I cannot fathom.
-
-TODO:
-=====
-
-libpnglite:
------------
-
-- Convert to stdint (and/or maybe native-zlib) types
-- Maybe present palette as RGBx/RGBA on load (as it is submitted for saving).
-- Discover and fix endianness-related bugs.
-- Fix png_t::pitch vs filter type ambigousness
-
-SDL_pnglite:
-------------
-
-- Discover and fix endianness-related bugs
-

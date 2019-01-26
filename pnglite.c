@@ -2,8 +2,10 @@
     For conditions of distribution and use, see copyright notice in pnglite.h
 */
 
-
+#ifdef PNGLITE_STDIO
 #include <stdio.h>
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -12,35 +14,27 @@
 
 static png_alloc_t png_alloc;
 static png_free_t png_free;
+static unsigned image_data_limit;
+static unsigned chunk_size_limit;
 
 static size_t
 file_read(png_t* png, void* out, size_t size, size_t numel)
 {
-    size_t result;
+    size_t result = 0;
     if(png->read_fun) {
         result = png->read_fun(out, size, numel, png->user_pointer);
-    } else {
-        if(!out) {
-            result = fseek(png->user_pointer, (long)(size*numel), SEEK_CUR);
-        } else {
-            result = fread(out, size, numel, png->user_pointer);
-        }
     }
-
     return result;
 }
 
 static size_t
 file_write(png_t* png, void* p, size_t size, size_t numel)
 {
-    size_t result;
+    size_t result = 0;
 
     if(png->write_fun) {
         result = png->write_fun(p, size, numel, png->user_pointer);
-    } else {
-        result = fwrite(p, size, numel, png->user_pointer);
     }
-
     return result;
 }
 
@@ -99,7 +93,7 @@ set_ul(unsigned char* buf, unsigned in)
 }
 
 int
-png_init(png_alloc_t pngalloc, png_free_t pngfree)
+png_init(png_alloc_t pngalloc, png_free_t pngfree, unsigned csl, unsigned idl)
 {
     if(pngalloc)
         png_alloc = pngalloc;
@@ -111,6 +105,9 @@ png_init(png_alloc_t pngalloc, png_free_t pngfree)
     else
         png_free = &free;
 
+    chunk_size_limit = csl;
+    image_data_limit = idl;
+
     return PNG_NO_ERROR;
 }
 
@@ -120,11 +117,92 @@ pot_align(int value, int pot)
     return (value + (1<<pot) - 1) & ~((1<<pot) -1);
 }
 
+const int channels[] = { 1, 0, 3, 1, 2, 0, 4 };
+#ifdef TRACE
+const char *ctnames[] = { "Y", "(undefined)", "RGB", "INDEXED", "YA", "(undefined)", "RGBA" };
+#endif
+
+static int
+bytes_per_pixel(int depth, int color_type) {
+    return pot_align(depth * channels[color_type], 3) >> 3;
+}
+static int
+bytes_per_scanline(int width, int depth, int color_type)
+{
+    return pot_align(width * depth * channels[color_type], 3) >> 3;
+}
+
+static int
+get_decompressed_data_size(png_t *png)
+{
+/*
+   zlib output buffer size for interlaced pngs:
+   we have more scanlines than h would indicate:
+
+   1 6 4 6 2 6 4 6
+   7 7 7 7 7 7 7 7
+   5 6 5 6 5 6 5 6
+   7 7 7 7 7 7 7 7
+   3 6 4 6 3 6 4 6
+   7 7 7 7 7 7 7 7
+   5 6 5 6 5 6 5 6
+   7 7 7 7 7 7 7 7
+
+   h/2 7th pass w   scanlines  : at least one for h>=2 images.
+   h/2 6th pass w/2 scanlines  : at least one for w>=2 images
+   h/4 5th pass w/2 scanlines  : at least one for h>=3 images.
+   h/4 4th pass w/4 scanlines  : at least one for w>=3 images.
+   h/8 3rd pass w/4 scanlines  : at least one for h>=5 images.
+   h/8 2nd pass w/8 scanlines  : at least one for w>=5 images.
+   h/8 1st pass w/8 scanlines  : at least one at all times.
+
+   this function overestimates needed buffer size
+   but hopefully not by much
+*/
+/* 1bpp 4x4.
+   1 6 4 6
+   7 7 7 7
+   5 6 5 6
+   7 7 7 7
+
+
+   1 = 1sl 1px = 2 bytes
+   4 = 1sl 1px = 2 bytes
+   5 = 1sl 2px = 2 bytes
+   6 = 2sl 2px ea = 4 bytes
+   7 = 2sl 4px ea = 4 bytes
+   total: 14 bytes.
+ */
+    int rv;
+    if (png->interlace_method == 0) {
+        rv = png->height * (png->pitch + 1);
+    } else {
+        int width = png->width;
+        int height = png->height;
+        int depth = png->depth;
+        int ct = png->color_type;
+
+        rv =
+            (bytes_per_scanline( width,      depth, ct) + 1) * (1 + height/2) +
+            (bytes_per_scanline((width+1)/2, depth, ct) + 1) * (1 + height/2) +
+            (bytes_per_scanline((width+1)/2, depth, ct) + 1) * (1 + height/4) +
+            (bytes_per_scanline((width+1)/4, depth, ct) + 1) * (1 + height/4) +
+            (bytes_per_scanline((width+1)/4, depth, ct) + 1) * (1 + height/8) +
+            (bytes_per_scanline((width+1)/8, depth, ct) + 1) * (1 + height/8) +
+            (bytes_per_scanline((width+1)/8, depth, ct) + 1) * (1 + height/8);
+    }
+#ifdef TRACE
+    fprintf(stderr, "png_decompressed_data_size(): decompressed_data_size estimated at %d\n", rv);
+#endif
+    return rv;
+}
+
 static int
 png_check_png(png_t* png)
 {
-    int channels[] = { 1, 0, 3, 1, 2, 0, 4 };
-
+    if (png->width == 0 || png->height == 0) {
+        return PNG_CORRUPTED;
+    }
     switch(png->depth) {
     case 1:
     case 2:
@@ -154,14 +232,39 @@ png_check_png(png_t* png)
         return PNG_CORRUPTED;
     }
 
-    /* bytes per pixel or one */
-    png->stride = pot_align(png->depth * channels[png->color_type], 3) >> 3;
+    if (png->compression_method != 0) {
+        return PNG_CORRUPTED;
+    }
+    if (png->filter_method != 0) {
+        return PNG_CORRUPTED;
+    }
 
-    /* bytes per scanline */
-    png->pitch = pot_align(png->width * png->depth * channels[png->color_type], 3) >> 3;
+    switch(png->interlace_method) {
+    case 0:
+    case 1:
+        break;
+    default:
+        return PNG_CORRUPTED;
+    }
 
-    if(png->interlace_method)
-        return PNG_NOT_SUPPORTED_INT;
+    /* bytes per pixel or one (unpacked) */
+    png->stride = bytes_per_pixel(png->depth, png->color_type);
+
+    /* bytes per scanline (packed) */
+    png->pitch = bytes_per_scanline(png->width, png->depth, png->color_type);
+
+#ifdef TRACE
+    fprintf(stderr, "png_check_png(): %dx%d depth=%d ctype=%s channels=%d interlace=%d stride=%d pitch=%d\n",
+           png->width, png->height, png->depth, ctnames[png->color_type],
+           channels[png->color_type], png->interlace_method, png->stride, png->pitch);
+#endif
+
+    if (png->stride * png->width * png->height > image_data_limit) {
+#ifdef TRACE
+        fprintf(stderr, "png_check_png(): image size over limit (%d), aborting.\n", image_data_limit);
+#endif
+        return PNG_IMAGE_TOO_BIG;
+    }
 
     return PNG_NO_ERROR;
 }
@@ -267,37 +370,37 @@ png_write_ihdr(png_t* png)
 void
 png_print_info(png_t* png)
 {
-    printf("PNG INFO:\n");
-    printf("\twidth:\t\t%d\n", png->width);
-    printf("\theight:\t\t%d\n", png->height);
-    printf("\tdepth:\t\t%d\n", png->depth);
-    printf("\tcolor:\t\t");
+    fprintf(stderr, "PNG INFO:\n");
+    fprintf(stderr, "\twidth:\t\t%d\n", png->width);
+    fprintf(stderr, "\theight:\t\t%d\n", png->height);
+    fprintf(stderr, "\tdepth:\t\t%d\n", png->depth);
+    fprintf(stderr, "\tcolor:\t\t");
 
     switch(png->color_type) {
     case PNG_GREYSCALE:
-        printf("greyscale\n");
+        fprintf(stderr, "greyscale\n");
         break;
     case PNG_TRUECOLOR:
-        printf("truecolor\n");
+        fprintf(stderr, "truecolor\n");
         break;
     case PNG_INDEXED:
-        printf("palette\n");
+        fprintf(stderr, "palette\n");
         break;
     case PNG_GREYSCALE_ALPHA:
-        printf("greyscale with alpha\n");
+        fprintf(stderr, "greyscale with alpha\n");
         break;
     case PNG_TRUECOLOR_ALPHA:
-        printf("truecolor with alpha\n");
+        fprintf(stderr, "truecolor with alpha\n");
         break;
     default:
-        printf("unknown, this is not good\n");
+        fprintf(stderr, "unknown, this is not good\n");
         break;
     }
-    printf("\ttransparency:\t%s\n", png->transparency_present ? "yes": "no");
-    printf("\tcompression:\t%s\n", png->compression_method?"unknown, this is not good":"inflate/deflate");
-    printf("\tfilter:\t\t%s\n",    png->filter_method?"unknown, this is not good":"adaptive");
-    printf("\tinterlace:\t%s\n",   png->interlace_method?"interlace":"no interlace");
-    printf("\tpitch:\t\t%d\n",     png->pitch);
+    fprintf(stderr, "\ttransparency:\t%s\n", png->transparency_present ? "yes": "no");
+    fprintf(stderr, "\tcompression:\t%s\n", png->compression_method?"unknown, this is not good":"inflate/deflate");
+    fprintf(stderr, "\tfilter:\t\t%s\n",    png->filter_method?"unknown, this is not good":"adaptive");
+    fprintf(stderr, "\tinterlace:\t%s\n",   png->interlace_method?"interlace":"no interlace");
+    fprintf(stderr, "\tpitch:\t\t%d\n",     png->pitch);
 }
 
 int
@@ -310,7 +413,7 @@ png_open_read(png_t* png, png_read_callback_t read_fun, void* user_pointer)
     png->write_fun = 0;
     png->user_pointer = user_pointer;
 
-    if (!read_fun && !user_pointer)
+    if (!read_fun || !user_pointer)
         return PNG_WRONG_ARGUMENTS;
 
     if (file_read(png, header, 1, 8) != 8)
@@ -331,7 +434,7 @@ png_open_write(png_t* png, png_write_callback_t write_fun, void* user_pointer)
     png->read_fun = 0;
     png->user_pointer = user_pointer;
 
-    if (!write_fun && !user_pointer)
+    if (!write_fun || !user_pointer)
         return PNG_WRONG_ARGUMENTS;
 
     return PNG_NO_ERROR;
@@ -343,6 +446,21 @@ png_open(png_t* png, png_read_callback_t read_fun, void* user_pointer)
     return png_open_read(png, read_fun, user_pointer);
 }
 
+#ifdef PNGLITE_STDIO
+static size_t
+png_stdio_read_fun(void* buf, size_t size, size_t num, void* user_pointer)
+{
+    if(!buf) {
+        return fseek(user_pointer, (long)(size*num), SEEK_CUR);
+    } else {
+        return fread(buf, size, num, user_pointer);
+    }
+}
+static size_t
+png_stdio_write_fun(void* buf, size_t size, size_t num, void* user_pointer)
+{
+    return fwrite(buf, size, num, user_pointer);
+}
 int
 png_open_file_read(png_t *png, const char* filename)
 {
@@ -351,7 +469,7 @@ png_open_file_read(png_t *png, const char* filename)
     if(!fp)
         return PNG_FILE_ERROR;
 
-    return png_open_read(png, 0, fp);
+    return png_open_read(png, png_stdio_read_fun, fp);
 }
 
 int
@@ -362,7 +480,7 @@ png_open_file_write(png_t *png, const char* filename)
     if(!fp)
         return PNG_FILE_ERROR;
 
-    return png_open_write(png, 0, fp);
+    return png_open_write(png, png_stdio_write_fun, fp);
 }
 
 int
@@ -378,6 +496,7 @@ png_close_file(png_t* png)
 
     return PNG_NO_ERROR;
 }
+#endif
 
 static int
 png_init_inflate(png_t* png)
@@ -405,11 +524,12 @@ png_end_inflate(png_t* png)
 {
     z_stream *stream = png->zs;
 
-    if(!stream)
-        return PNG_MEMORY_ERROR;
+    if(!stream) { return PNG_MEMORY_ERROR; }
 
-    if(inflateEnd(stream) != Z_OK)
-        return PNG_ZLIB_ERROR;
+#ifdef TRACE
+    fprintf(stderr, "png_end_inflate(): decompressed total_out: %lu\n", stream->total_out);
+#endif
+    if(inflateEnd(stream) != Z_OK) { return PNG_ZLIB_ERROR; }
 
     png_free(png->zs);
 
@@ -419,7 +539,7 @@ png_end_inflate(png_t* png)
 static int
 png_inflate(png_t* png, unsigned char* data, int len)
 {
-    int result;
+    int result = Z_OK;
     z_stream *stream = png->zs;
 
     if(!stream)
@@ -428,13 +548,37 @@ png_inflate(png_t* png, unsigned char* data, int len)
     stream->next_in = (unsigned char*)data;
     stream->avail_in = len;
 
+    // we can get into situation when there is more
+    // data that can be decompressed than we actually
+    // need. so our estimation of final data size
+    // must be correct or at least overestimate only.
+    /* while (result != Z_STREAM_END) {
+
+        if (result == Z_OK) { // ehrm, moar buffer needed?
+            // dere somehow
+        }
+    }*/
     result = inflate(stream, Z_SYNC_FLUSH);
 
-    if(result != Z_STREAM_END && result != Z_OK)
+    if(result != Z_STREAM_END && result != Z_OK) {
+#ifdef TRACE
+        fprintf(stderr, "png_inflate(): zlib error: %s\n", stream->msg);
+#endif
         return PNG_ZLIB_ERROR;
+    }
 
-    if(stream->avail_in != 0)
+    if(stream->avail_in != 0) {
+#ifdef TRACE
+        fprintf(stderr, "png_inflate(): zlib error: stream->avail_in != 0 : %d\n", stream->avail_in);
+        fprintf(stderr, "png_inflate(): len was %d; total_out = %lu\n", len, stream->total_out);
+        unsigned char buf[4096];
+        stream->next_out = buf;
+        stream->avail_out = 4096;
+        int res = inflate(stream, Z_SYNC_FLUSH);
+        fprintf(stderr, "png_inflate(): another pass; res=%d (%s), total_out=%lu\n", res,stream->msg, stream->total_out);
+#endif
         return PNG_ZLIB_ERROR;
+    }
 
     return PNG_NO_ERROR;
 }
@@ -534,6 +678,15 @@ png_read_idat(png_t* png, unsigned firstlen)
         if ((result = file_read_ul(png, &length)) != PNG_NO_ERROR)
             break;
 
+        if (length > chunk_size_limit) {
+#ifdef TRACE
+            fprintf(stderr, "png_read_idat(): aborting on chunk size %d (over user limit of %d)\n", length, chunk_size_limit);
+#endif
+            png_free(chunk);
+            return PNG_OVERSIZE_CHUNK;
+
+        }
+
         if(length > old_len) {
             png_free(chunk);
             chunk = png_alloc(length);
@@ -545,14 +698,21 @@ png_read_idat(png_t* png, unsigned firstlen)
         }
 
         if(file_read(png, &type, 1, 4) != 4) {
-            result = PNG_FILE_ERROR;
+            result = PNG_IO_ERROR;
             break;
         }
 
     } while(type == *(unsigned int*)"IDAT");
 
-    if(type == *(unsigned int*)"IEND")
+    if(type == *(unsigned int*)"IEND") {
         result = PNG_DONE;
+    } else {
+#ifdef TRACE
+        char *chtype = (char *)(&type);
+        fprintf(stderr, "png_read_idat() unexpected chunk '%c%c%c%c' after an IDAT\n", chtype[0], chtype[1], chtype[2], chtype[3]);
+#endif
+        result = PNG_CORRUPTED;
+    }
 
     png_free(chunk);
     png_end_inflate(png);
@@ -567,12 +727,18 @@ png_process_chunk(png_t* png)
     unsigned type;
     unsigned length;
 
-    if (file_read_ul(png, &length) != PNG_NO_ERROR)
-        return PNG_EOF_ERROR;
+    if (file_read_ul(png, &length) != PNG_NO_ERROR) { return PNG_EOF_ERROR; }
 
-    if (file_read(png, &type, 4, 1) != 1)
-        return PNG_EOF_ERROR;
+    if (file_read(png, &type, 4, 1) != 1) { return PNG_EOF_ERROR; }
 
+    if (length > chunk_size_limit) {
+#ifdef TRACE
+        char *chtype = (char *)(&type);
+        fprintf(stderr, "png_process_chunk() aborting on chunk '%c%c%c%c' length %u : over chunk size limit %u\n",
+               chtype[0], chtype[1], chtype[2], chtype[3], length, chunk_size_limit);
+#endif
+        return PNG_OVERSIZE_CHUNK;
+    }
     if (type == *(unsigned int *) "PLTE") {
         if (length % 3)
             return PNG_CORRUPTED;
@@ -631,13 +797,16 @@ png_process_chunk(png_t* png)
         }
     } else if (type == *(unsigned int*)"IDAT") {
         /* PNG_INDEXED has to have PLTE before IDAT */
-        if ((png->color_type == PNG_INDEXED) &&
-            (png->palette_size == 0))
+        if ((png->color_type == PNG_INDEXED) && (png->palette_size == 0)) {
+#ifdef TRACE
+            fprintf(stderr, "No PLTE before IDAT in PNG_INDEXED\n");
+#endif
             return PNG_CORRUPTED;
+        }
 
         /*  if we found an idat, all other idats should follow
             with no other chunks in between */
-        png->png_datalen = png->height * (png->pitch + 1);
+        png->png_datalen = get_decompressed_data_size(png);
         png->png_data = png_alloc(png->png_datalen);
 
         if(!png->png_data)
@@ -647,6 +816,10 @@ png_process_chunk(png_t* png)
     } else if (type == *(unsigned int*)"IEND") {
         return PNG_DONE;
     } else {
+#ifdef TRACE
+        char *chunk = (char*)(&type);
+        fprintf(stderr, "png_process_chunk(): skipping '%c%c%c%c' of %d bytes\n", chunk[0],  chunk[1], chunk[2], chunk[3], length);
+#endif
         if (file_read(png, 0, length + 4, 1) != 1) /* unknown chunk */
             return PNG_EOF_ERROR;
     }
@@ -709,7 +882,7 @@ static int png_write_trns(png_t *png)
         break;
 
     default:
-        return PNG_UNKNOWN_TRNS;
+        return PNG_TRNS_WRONG_COLORTYPE;
     }
     memmove(trns + 4, "tRNS", 4);
     set_ul(trns, length);
@@ -759,7 +932,6 @@ static int png_unfilter(png_t* png, unsigned char* data)
         reconstructed = data + png->pitch * i;
         up_reconstructed = i > 0 ? data + png->pitch * (i - 1) : 0;
         filter_type = *filtered++;
-
         switch(filter_type) {
         case PNG_FILTER_NONE:
             memcpy(reconstructed, filtered, png->pitch);
@@ -800,6 +972,9 @@ static int png_unfilter(png_t* png, unsigned char* data)
             break;
 
         default:
+#ifdef TRACE
+            fprintf(stderr, "png_unfilter sl=%d unknown filter type %d\n", i, (int)filter_type);
+#endif
             return PNG_UNKNOWN_FILTER;
         }
     }
@@ -837,33 +1012,18 @@ png_unpack_byte(unsigned char *dst, unsigned char *src, int depth)
 }
 
 int
-png_get_data(png_t* png, unsigned char* data)
+png_unfilter_unpack(png_t *png, unsigned char *data)
 {
-    int result = PNG_NO_ERROR;
+    int result;
     unsigned char *packed_pixels;
     unsigned char *packed_data;
     unsigned char *unpacked_row;
     unsigned row, offset;
     unsigned char tail[8];
     const unsigned pipeby = 8 / png->depth; /* pixels per byte */
-
-    png->transparency_present = 0;
-    png->palette_size = 0;
-    png->png_data = NULL;
-
-    while(result == PNG_NO_ERROR)
-        result = png_process_chunk(png);
-
-    if(result != PNG_DONE) {
-        if (png->png_data)
-            png_free(png->png_data);
-        return result;
-    }
-
-    if (png->png_data == NULL)
-        /* no IDAT chunk in file */
-        return PNG_CORRUPTED;
-
+#ifdef TRACE
+    fprintf(stderr, "png_unfilter_unpack(): got data=%p\n", data);
+#endif
     if (png->depth < 8) {
         packed_data = png_alloc(png->height * png->pitch);
 
@@ -874,7 +1034,6 @@ png_get_data(png_t* png, unsigned char* data)
 
         if (result != PNG_NO_ERROR) {
             png_free(packed_data);
-            png_free(png->png_data);
             return result;
         }
 
@@ -891,7 +1050,15 @@ png_get_data(png_t* png, unsigned char* data)
                     unpacked_row + offset points to the last unpacked pixels
                     in the row. There are png->width % pipeby of them. */
                 png_unpack_byte(tail, packed_pixels, png->depth);
+#ifdef TRACE
+                fprintf(stderr, "png_unfilter_unpack(): copy unpacked tail at offs %d len %d unpacked_row %p: ",
+                        offset, png->width % pipeby, (void *)unpacked_row);
+#endif
                 memcpy(unpacked_row + offset, tail, png->width % pipeby);
+#ifdef TRACE
+                for (unsigned ii = 0; ii < png->width % pipeby; ii++) { fprintf(stderr, "%02x ", (int)(tail[ii])); }
+                fprintf(stderr, "\n");
+#endif
             } else {
                 for (offset = 0; offset < png->width; offset += pipeby)
                     png_unpack_byte(unpacked_row + offset, packed_pixels++,
@@ -902,6 +1069,184 @@ png_get_data(png_t* png, unsigned char* data)
         png_free(packed_data);
     } else {
         result = png_unfilter(png, data);
+    }
+    return result;
+}
+
+/* Intentionally done the dumbest way possible. Who ever interlaces PNGs nowadays? Focus on correctness */
+int
+png_deinterlace(png_t* png, unsigned char *data)
+{
+    int result = PNG_NO_ERROR;
+    png_t subpng;
+    /* set up invariants for subimages */
+    subpng.color_type = png->color_type;
+    subpng.filter_method = png->filter_method;
+    subpng.compression_method = 0;
+    subpng.depth = png->depth;
+    subpng.interlace_method = 0;
+    subpng.stride = png->stride;
+    int stride = subpng.stride; /* bytes per unpacked pixel */
+
+/* Adam7
+   1 6 4 6 2 6 4 6
+   7 7 7 7 7 7 7 7
+   5 6 5 6 5 6 5 6
+   7 7 7 7 7 7 7 7
+   3 6 4 6 3 6 4 6
+   7 7 7 7 7 7 7 7
+   5 6 5 6 5 6 5 6
+   7 7 7 7 7 7 7 7
+ */
+    /* pass no                       1  2  3  4  5  6  7 */
+    const unsigned int hstride[] = { 8, 8, 4, 4, 2, 2, 1 };
+    const unsigned int vstride[] = { 8, 8, 8, 4, 4, 2, 2 };
+    const unsigned int hshift[]  = { 0, 4, 0, 2, 0, 1, 0 };
+    const unsigned int vshift[]  = { 0, 0, 4, 0, 2, 0, 1 };
+
+    unsigned int offset = 0, x, y;
+    unsigned char* subdata = NULL;
+    int pass = 0;
+#ifdef TRACE
+    int n = 0, maxoffs = 0;
+# ifndef TRACE_DEINTERLACE
+    memset(data, 0x23, png->width * png->height * png->stride);
+# endif
+#endif
+    /* allocate subdata for the last pass, that would be all the most we need for any of the passes */
+    int subdata_max = (png->width * bytes_per_pixel(png->depth, png->color_type)) * ( png->height/2 + 1);
+    subdata = png_alloc(subdata_max);
+    if (subdata == NULL) {
+        return PNG_MEMORY_ERROR;
+    }
+    do {
+#ifdef TRACE_DEINTERLACE_DESTRUCTIVE
+        /* make it so that deinterlace passes are not additive; breaks output */
+        memset(data, 0x23, png->width * png->height * png->stride);
+#endif
+
+        /* see if we're to skip this pass if the image is too small */
+        if ((hshift[pass] >= png->width) || (vshift[pass] >= png->height)) {
+            /* this way we don't get to have a scanline */
+            pass += 1;
+            continue;
+        }
+        /* now, (png->width - hshift[pass] + hstride[pass] - 1) / hstride[pass]
+         *     would that be the number of expected columns? Yup.
+         *  same for scanlines.
+         *
+         * set up a temporary png_t for this subimage
+         */
+        subpng.width = (png->width - hshift[pass] + hstride[pass] - 1) / hstride[pass];
+        subpng.height = (png->height - vshift[pass] + vstride[pass] - 1) / vstride[pass];
+        /* make sure we get at least one scanline and column */
+        subpng.width = subpng.width > 0 ? subpng.width : 1;
+        subpng.height = subpng.height > 0 ? subpng.height : 1;
+        /* the rest is trivial */
+        subpng.pitch = bytes_per_scanline(subpng.width, subpng.depth, subpng.color_type);
+        subpng.png_datalen = subpng.height * (subpng.pitch + 1);
+        subpng.png_data = png->png_data + offset;
+#ifdef TRACE
+        fprintf(stderr, "png_deinterlace() pass %d: subimage %dx%d pitch=%d datalen=%d offset=%d from %p\n",
+                pass + 1, subpng.width, subpng.height, subpng.pitch , subpng.png_datalen,
+                offset, (void *)subpng.png_data);
+#endif
+        offset += subpng.png_datalen;
+        if (offset > png->png_datalen) {
+#ifdef TRACE
+            fprintf(stderr, "png_deinterlace() pass %d: not enough data (end-of-pass-data at %u > png_datalen %u)\n",
+                   pass + 1, offset, png->png_datalen);
+#endif
+            png_free(subdata);
+            return PNG_CORRUPTED;
+        }
+        result = png_unfilter_unpack(&subpng, subdata);
+        if (PNG_NO_ERROR != result) {
+#ifdef TRACE
+            fprintf(stderr, "png_deinterlace() pass %d: freeing subdata at %p\n", pass + 1, (void *)subdata);
+#endif
+            png_free(subdata);
+            return result;
+        }
+        /* not optimizing it - not worth the time */
+        for (y = 0; y < subpng.height; y++) {
+#ifdef TRACE_DEINTERLACE
+            fprintf(stderr, "pass %d unp %d:", pass + 1, y);
+#endif
+            for (x = 0; x < subpng.width; x++) {
+                for (int bi = 0; bi < png->stride; bi++) {
+                    int destx = x * hstride[pass] + hshift[pass];
+                    int desty = y * vstride[pass] + vshift[pass];
+                    int desti = desty*stride*png->width + destx*stride + bi;
+#ifdef TRACE_DEINTERLACE
+                    fprintf(stderr, "desti = %d * %d * %d + %d * %d + %d = %d\n",
+                            desty, stride, png->width, destx, stride,  bi, desti);
+#endif
+                    int srci = y*stride*subpng.width + x*stride + bi;
+                    data[desti] = subdata[srci];
+#ifdef TRACE_DEINTERLACE
+                    if (desti > maxoffs) { maxoffs = desti; }
+                    n += 1;
+                    fprintf(stderr, "    set (%d,%d) -> (%d,%d) to %d from %d at %d\n", x, y, destx, desty, (int)subdata[srci], srci, desti);
+#endif
+                }
+            }
+#ifdef TRACE_DEINTERLACE
+            fprintf(stderr, "\n");
+#endif
+        }
+#ifdef TRACE_DEINTERLACE_DESTRUCTIVE
+        /* without the memset above this causes tons of uninit value errors from valgrind */
+        for (y = 0; y < png->height ; y++) {
+            fprintf(stderr, "png_deinterlace() pass %d row %03d: ", pass + 1, y);
+            for (x= 0 ; x < png->width ; x++) {
+                if (data[x*stride + y*png->height*stride] != 0x23) {
+                    fprintf(stderr, "%02x ", data[x*stride + y*png->height*stride]);
+                } else {
+                    fprintf(stderr, "__ ");
+                }
+            }
+            fprintf(stderr, "\n");
+        }
+#endif
+        pass += 1;
+    } while (pass < 7);
+#ifdef TRACE
+    fprintf(stderr, "png_deinterlace(): %d pixels set of %dx%d =%d  at %p maxoffs=%d \n", n, png->width, png->height, png->width * png->height, data, maxoffs);
+#endif
+    png_free(subdata);
+    return result;
+}
+
+int
+png_get_data(png_t* png, unsigned char* data)
+{
+    int result = PNG_NO_ERROR;
+
+    png->transparency_present = 0;
+    png->palette_size = 0;
+    png->png_data = NULL;
+
+    while(result == PNG_NO_ERROR) {
+        result = png_process_chunk(png);
+    }
+    if(result != PNG_DONE) {
+        if (png->png_data) {
+            png_free(png->png_data);
+        }
+        return result;
+    }
+    if (png->png_data == NULL) {
+#ifdef TRACE
+        fprintf(stderr, "png_get_data() : no IDAT chunk in file.\n");
+#endif
+        /* no IDAT chunk in file */
+        return PNG_CORRUPTED;
+    }
+    if (png->interlace_method) {
+        result = png_deinterlace(png, data);
+    } else {
+        result = png_unfilter_unpack(png, data);
     }
     png_free(png->png_data);
     return result;
@@ -983,16 +1328,18 @@ char* png_error_string(int error)
     case PNG_DONE:
         return "PNG done";
     case PNG_NOT_SUPPORTED_16:
-        return "16 bit-per channel PNGs are not supported.";
-    case PNG_UNKNOWN_TRNS:
-        return "Unsupported transparency mode.";
-    case PNG_NOT_SUPPORTED_INT:
-        return "Interlaced PNGs are not supported by pnglite.";
+        return "16 bits per channel PNGs are not supported.";
+    case PNG_TRNS_WRONG_COLORTYPE:
+        return "Transparency supplied for a color type with alpha.";
     case PNG_WRONG_ARGUMENTS:
         return "Wrong combination of arguments passed to png_open. You must"
                " use either a read_function or supply a file pointer to use.";
     case PNG_CORRUPTED:
         return "PNG data does not follow the specification or is corrupted.";
+    case PNG_IMAGE_TOO_BIG:
+        return "PNG image data size is over the user-set limit";
+    case PNG_OVERSIZE_CHUNK:
+        return "PNG chunk size is over the user-set limit";
     default:
         return "Unknown error.";
     };

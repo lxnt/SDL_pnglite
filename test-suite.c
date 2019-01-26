@@ -22,7 +22,6 @@ char *get_basename(const char *fname, char *buf) {
 }
 #endif
 
-
 void dump_buf(const char *fname, const void *rwo_buf, const Sint64 sz) {
     FILE *fp;
     char buf[FILENAME_MAX + 1], *bn;
@@ -31,9 +30,9 @@ void dump_buf(const char *fname, const void *rwo_buf, const Sint64 sz) {
     if (NULL != (fp = fopen(bn, "w"))) {
         fwrite(rwo_buf, (size_t)sz, 1, fp);
         fclose(fp);
-        printf("wrote %s\n", bn);
+        fprintf(stderr, "wrote %s\n", bn);
     } else {
-        printf("can't write %s\n", bn);
+        fprintf(stderr, "can't write %s\n", bn);
     }
 }
 
@@ -41,54 +40,60 @@ int expected_ok(const char *fname) {
     char buf[FILENAME_MAX + 1], *bn;
 
     bn = get_basename(fname, buf);
-    if ( (bn[0] == 'x')
-      || (NULL != strstr(bn, "16.png"))
-      || (NULL != strchr(bn, 'i')) )
+    if ( (bn[0] == 'x') || (NULL != strstr(bn, "16.png")) )
         return 0;
     return 1;
 }
-
-int compare_surfaces(const char *fname, SDL_Surface *si_surf, SDL_Surface *spl_surf) {
-    SDL_Surface *stmp = NULL;
-    int rv = 0, do_free_si_surf = 0, pixel_format_mismatch = 0;
-
+/* consumes both surfaces */
+int compare_surfaces(const char *fname, SDL_Surface *si_surf, SDL_Surface *spl_surf , int loud) {
+    int rv = 0, pixel_format_mismatch = 0;
+    if (!spl_surf || !si_surf) {
+        if (loud) {
+            fprintf(stderr, "compare_surfaces(%s): spl_surf is %p si_surf is %p", fname, (void *)spl_surf, (void *)si_surf);
+            if (si_surf) { SDL_FreeSurface(si_surf); }
+            if (spl_surf)  { SDL_FreeSurface(spl_surf); }
+            return 1;
+        }
+    }
     if (spl_surf->format->format != si_surf->format->format) {
         if ((spl_surf->format->format == SDL_PIXELFORMAT_RGBA8888) &&
             (si_surf->format->format == SDL_PIXELFORMAT_ABGR8888)) {
-            stmp = si_surf;
-            si_surf = SDL_ConvertSurface(stmp, spl_surf->format, 0);
-            if (NULL == si_surf) {
-                printf("surf convert failed.\n");
-                return 1;
+            SDL_Surface *stmp = SDL_ConvertSurface(si_surf, spl_surf->format, 0);
+            if (NULL == stmp) {
+                fprintf(stderr, "compare_surfaces(%s): pixel format convert failed: %s\n", fname, SDL_GetError());
+                rv += 1;
+                goto done;
+            } else {
+                SDL_FreeSurface(si_surf);
+                si_surf = stmp;
             }
-            do_free_si_surf = 1;
         } else {
-            printf("%s: pixel format mismatch spl %s si %s\n", fname,
+            fprintf(stderr, "compare_surfaces(%s): pixel format mismatch spl %s si %s\n", fname,
                 SDL_GetPixelFormatName(spl_surf->format->format),
                 SDL_GetPixelFormatName(si_surf->format->format));
-            rv = 1;
-            pixel_format_mismatch = 1;
+            rv += 1;
+            pixel_format_mismatch = 1; /* delay error reporting a bit */
         }
     }
-
     if (spl_surf->w != si_surf->w) {
-        printf("%s: w mismatch spl %d si %d\n", fname, spl_surf->w, si_surf->w);
+        fprintf(stderr, "compare_surfaces(%s): w mismatch spl %d si %d\n", fname, spl_surf->w, si_surf->w);
         rv += 1;
     }
     if (spl_surf->h != si_surf->h) {
-        printf("%s: h mismatch spl %d si %d\n", fname, spl_surf->h, si_surf->h);
+        fprintf(stderr, "compare_surfaces(%s):  h mismatch spl %d si %d\n", fname, spl_surf->h, si_surf->h);
         rv += 1;
     }
     if (spl_surf->pitch != si_surf->pitch) {
-        printf("%s: pitch mismatch spl %d si %d\n", fname, spl_surf->pitch, si_surf->pitch);
+        fprintf(stderr, "compare_surfaces(%s): pitch mismatch spl %d si %d\n", fname, spl_surf->pitch, si_surf->pitch);
         rv += 1;
     }
-    if (pixel_format_mismatch)
+    if (pixel_format_mismatch) {
+        rv += 1;
         goto done;
-
+    }
     if (spl_surf->format->palette) {
         if (spl_surf->format->palette->ncolors != si_surf->format->palette->ncolors) {
-            printf("%s: palette ncolors mismatch spl %d si %d\n", fname,
+            fprintf(stderr, "compare_surfaces(%s): palette ncolors mismatch spl %d si %d\n", fname,
                     spl_surf->format->palette->ncolors, si_surf->format->palette->ncolors);
             rv += 1;
         }
@@ -104,90 +109,102 @@ int compare_surfaces(const char *fname, SDL_Surface *si_surf, SDL_Surface *spl_s
                         cm += 1;
             }
             if (cm > 0) {
-                printf("%s: palette mismatch %d colors\n", fname, cm);
+                fprintf(stderr, "compare_surfaces(%s): palette mismatch %d colors\n", fname, cm);
                 rv += cm;
             }
         }
     }
-    {
+    if (si_surf && spl_surf) {
         Uint32 spl_key = 0, si_key = 42;
         int si_rv, spl_rv;
         spl_rv = SDL_GetColorKey(spl_surf, &spl_key);
         si_rv = SDL_GetColorKey(si_surf, &si_key);
         if (si_rv != spl_rv) {
-            printf("%s: SDL_GetColorKey() rv mismatch spl %d si %d \n", fname, spl_rv, si_rv);
+            fprintf(stderr, "compare_surfaces(%s): SDL_GetColorKey() rv mismatch spl %d si %d \n", fname, spl_rv, si_rv);
             rv += 1;
         } else {
             if ((si_rv == 0) && (spl_key != si_key)) {
-                printf("%s: colorkey mismatch spl %x si %x\n", fname, spl_key, si_key);
+                fprintf(stderr, "compare_surfaces(%s): colorkey mismatch spl %x si %x\n", fname, spl_key, si_key);
                 rv += 1;
             }
         }
-    }
-
-    {
         int i, fails = 0, j;
         Uint8 *spl_row = spl_surf->pixels;
         Uint8 *si_row = si_surf->pixels;
         for (i = 0; i < spl_surf->h ; i++) {
-            if ( 0 != memcmp(spl_row + i*spl_surf->pitch, si_row +  i*si_surf->pitch, si_surf->pitch)) {
+            if ( 0 != memcmp(spl_row + i*spl_surf->pitch, si_row +  i*si_surf->pitch, si_surf->format->BytesPerPixel * si_surf->w)) {
                 fails += 1;
-                printf("spl: ");
+                fprintf(stderr, "pnglite %03d: ", i);
                 for(j=0; j<spl_surf->pitch; j++)
-                    printf("%02x ", (unsigned) (*(spl_row + i*spl_surf->pitch + j)));
-                printf("\n");
-                printf("si: ");
+                    fprintf(stderr, "%02x ", (unsigned) (*(spl_row + i*spl_surf->pitch + j)));
+                fprintf(stderr, "\n");
+                fprintf(stderr, "image   %03d: ", i);
                 for(j=0; j<si_surf->pitch; j++)
-                    printf("%02x ", (unsigned) (*(si_row + i*si_surf->pitch + j)));
-                printf("\n");
+                    fprintf(stderr, "%02x ", (unsigned) (*(si_row + i*si_surf->pitch + j)));
+                fprintf(stderr, "\n");
             }
         }
         if (fails > 0) {
-            printf("%s: pixel data mismatch (%d rows)\n", fname, fails);
+            for (i = 0; i < spl_surf->h ; i++) {
+                fprintf(stderr, "pnglite %03d: ", i);
+                for(j=0; j<spl_surf->pitch; j++) {
+                    fprintf(stderr, "%02x ", (unsigned) (*(spl_row + i*spl_surf->pitch + j)));
+                }
+                fprintf(stderr, "\n");
+            }
+            for (i = 0; i < spl_surf->h ; i++) {
+                fprintf(stderr, "image   %03d: ", i);
+                for(j=0; j<si_surf->pitch; j++) {
+                    fprintf(stderr, "%02x ", (unsigned) (*(si_row + i*si_surf->pitch + j)));
+                }
+                fprintf(stderr, "\n");
+            }
+            fprintf(stderr, "compare_surfaces(%s): pixel data mismatch (%d rows)\n", fname, fails);
             rv += fails;
         }
     }
-
-  done:
-    if (do_free_si_surf)
-        SDL_FreeSurface(si_surf);
+done:
+    if (spl_surf) { SDL_FreeSurface(spl_surf); }
+    if (si_surf) { SDL_FreeSurface(si_surf); }
     return rv;
 }
 
-int test_load(const char *fname, int expected_ok) {
+int test_load(const char *fname, int expected_ok, int loud) {
     SDL_Surface *si_surf, *spl_surf;
     int rv = 0;
 
+    if (loud) {
+        fprintf(stderr, "SDL_LoadPNG():\n");
+    }
     spl_surf = SDL_LoadPNG(fname);
     if (NULL == spl_surf) {
-        if (expected_ok) {
-            printf("SDL_LoadPNG(%s): %s\n", fname , SDL_GetError());
-            return 1;
+        if (loud || expected_ok) {
+            fprintf(stderr, "%s\n", SDL_GetError());
         }
-        return 0;
+        rv = 1;
+    } else if (loud) {
+        fprintf(stderr, "    size %dx%d pitch=%d pf=%s\n",
+            spl_surf->w, spl_surf->h, spl_surf->pitch, SDL_GetPixelFormatName(spl_surf->format->format));
     }
-#if defined(LOUD)
-printf("w %d h %d pitch %d pf %s\n",
-    spl_surf->w, spl_surf->h, spl_surf->pitch, SDL_GetPixelFormatName(spl_surf->format->format));
-#endif
+    if (loud) {
+        fprintf(stderr, "IMG_Load():\n");
+    }
     si_surf = IMG_Load(fname);
     if (NULL == si_surf) {
-        if (expected_ok) {
-            printf("IMG_Load(%s): %s\n", fname , SDL_GetError());
-            SDL_FreeSurface(spl_surf);
-            return 1;
-        }
-        return 0;
+        fprintf(stderr, "    IMG_Load(%s): %s\n", fname , SDL_GetError());
+        if (expected_ok) { rv += 1; }
     }
-
-    rv += compare_surfaces(fname, si_surf, spl_surf);
-
-    SDL_FreeSurface(si_surf);
-    SDL_FreeSurface(spl_surf);
+    if (si_surf && loud) {
+        fprintf(stderr, "    size %dx%d pitch=%d pf=%s\n",
+            si_surf->w, si_surf->h, si_surf->pitch, SDL_GetPixelFormatName(si_surf->format->format));
+    }
+    if (spl_surf && si_surf) {
+        rv += compare_surfaces(fname, si_surf, spl_surf ,loud);
+    }
     return expected_ok ? rv : 0;
 }
 
-int test_save(const char *fname, int expected_ok) {
+int test_save(const char *fname, int expected_ok, int loud) {
     SDL_Surface *si_surf = NULL, *spl_surf = NULL;
     SDL_RWops *rwo = NULL;
     void *rwo_buf = NULL;
@@ -197,34 +214,31 @@ int test_save(const char *fname, int expected_ok) {
 
     spl_surf = SDL_LoadPNG(fname);
     if (NULL == spl_surf) {
-        if (expected_ok)
-            printf("SDL_LoadPNG(%s): %s\n", fname , SDL_GetError());
+        fprintf(stderr, "SDL_LoadPNG(%s): %s\n", fname , SDL_GetError());
         rv = 1;
         goto exit;
     }
-#if defined(LOUD)
-    {
+    if (loud) {
         Uint32 colorkey = 0;
         SDL_GetColorKey(spl_surf, &colorkey);
-        printf("%s/spl: w %d h %d pitch %d pf %s ck %x\n", fname,
+        fprintf(stderr, "%s/spl: w %d h %d pitch %d pf %s ck %x\n", fname,
             spl_surf->w, spl_surf->h, spl_surf->pitch,
             SDL_GetPixelFormatName(spl_surf->format->format), colorkey);
     }
-#endif
     rwo_buf = SDL_malloc(rwo_buf_sz);
     if (NULL == rwo_buf) {
-        printf("SDL_malloc(): %s\n", SDL_GetError());
+        fprintf(stderr, "SDL_malloc(): %s\n", SDL_GetError());
         return 1;
     }
     rwo = SDL_RWFromMem(rwo_buf, rwo_buf_sz);
     if (NULL == rwo) {
-        printf("SDL_RWFromMem(): %s\n", SDL_GetError());
+        fprintf(stderr, "SDL_RWFromMem(): %s\n", SDL_GetError());
         rv = 1;
         goto exit;
     }
 
     if (-1 == SDL_SavePNG_RW(spl_surf, rwo, 0)) {
-        printf("%s: SDL_SavePNG_RW(): %s\n", fname, SDL_GetError());
+        fprintf(stderr, "%s: SDL_SavePNG_RW(): %s\n", fname, SDL_GetError());
         rv = 1;
         goto exit;
     }
@@ -233,55 +247,62 @@ int test_save(const char *fname, int expected_ok) {
 
     si_surf = IMG_LoadPNG_RW(rwo);
     if (NULL == si_surf) {
-        printf("IMG_Load(%s): %s\n", fname , SDL_GetError());
+        fprintf(stderr, "IMG_Load(%s): %s\n", fname , SDL_GetError());
         dump_buf(fname, rwo_buf, sz);
         rv = 1;
         goto exit;
     }
 
-    rv += compare_surfaces(fname, si_surf, spl_surf);
+    rv += compare_surfaces(fname, si_surf, spl_surf, loud);
     if (rv)
         dump_buf(fname, rwo_buf, sz);
 
   exit:
-    if (rwo)
-        SDL_FreeRW(rwo);
-    if (rwo_buf)
-        SDL_free(rwo_buf);
-    if (spl_surf)
-        SDL_FreeSurface(spl_surf);
-    if (si_surf)
-        SDL_FreeSurface(si_surf);
+    if (rwo) { SDL_FreeRW(rwo); }
+    if (rwo_buf) { SDL_free(rwo_buf); }
     return expected_ok ? rv : 0;
 }
 
 int main(int argc, char *argv[]) {
-    int i, fails = 0;
+    int i, fails = 0, loud = 0, failcount = 0;
     char *fname;
 
-    printf("=== TEST LOAD =====================================\n");
+    loud = getenv("LOUD") != NULL;
+
+    fprintf(stderr, "=== TEST LOAD =====================================\n");
     for (i = 1; i < argc; i++) {
         fname = argv[i];
-        fails = test_load(fname, expected_ok(fname));
-#if defined(LOUD)
-        if (fails == 0)
-            printf("%s: OK\n", fname);
-#endif
+        if (loud) { fprintf(stderr, "%s : \n", fname); }
+        fails = test_load(fname, expected_ok(fname), loud);
+        failcount += fails;
+        if (loud) {
+            if (fails == 0) {
+                fprintf(stderr, "%s: OK\n", fname);
+            } else {
+                fprintf(stderr, "%s: FAIL\n", fname);
+            }
+        }
     }
-    printf("=== TEST SAVE =====================================\n");
+    fprintf(stderr, "=== TEST SAVE =====================================\n");
     for (i = 1; i < argc; i++) {
         fname = argv[i];
-        fails = test_save(fname, expected_ok(fname));
-#if defined(LOUD)
-        if (fails == 0)
-            printf("%s: OK\n", fname);
-#endif
+        if (loud) { fprintf(stderr, "%s : \n", fname); }
+        fails = test_save(fname, expected_ok(fname), loud);
+        failcount += fails;
+        if (loud) {
+            if (fails == 0) {
+                fprintf(stderr, "%s: OK\n", fname);
+            } else {
+                fprintf(stderr, "%s: FAIL\n", fname);
+            }
+        }
     }
+    fprintf(stderr, "=== TEST FAILURES: %d =====================================\n", failcount);
     IMG_Quit();
 #if defined(_WIN32)
     SDL_Delay(100500);
 #endif
     SDL_Quit();
-    return fails;
+    return failcount;
 }
 
