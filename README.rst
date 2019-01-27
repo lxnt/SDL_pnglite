@@ -106,6 +106,13 @@ Filtering is not done - patches are welcome.
 Compression is to be assumed suboptimal.
 
 
+Thread safety:
+==============
+
+This code is thread-safe as long as png_t objects are kept thread-local and
+the supplied callbacks are thread-safe themselves.
+
+
 SDL_Surface wrapper for the above
 *********************************
 
@@ -146,6 +153,12 @@ Notable differences from IMG_SavePNG_RW():
 
 - Palettes and colorkeys are preserved as much as possible within the format
   (IMG_SavePNG_RW() doesn't attempt this at all)
+
+
+Thread safety:
+==============
+
+The wrapper is thread-safe as long as the supplied RWops object is.
 
 
 Test suite (test-suite.c):
