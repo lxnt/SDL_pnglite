@@ -193,10 +193,9 @@ Known issues:
 
 - SDL2 can have colorkeyed RGBA surfaces. PNG does not support colorkeys on RGBA data, thus
   the colorkey is lost on save. Alternative would be to lose alpha channel on matching pixels.
-- ``IMG_LoadPNG_RW()`` sets number of palette entries directly. This cannot be done
-  via SDL API (``SDL_AllocPalette()`` / ``SDL_SetSurfacePalette()``). Right now SDL_pnglite
-  creates short palettes, otherwise test-suite will dutifully show palette mismatches.
 - ``tbbn0g04.png: pixel format mismatch spl SDL_PIXELFORMAT_INDEX8 si SDL_PIXELFORMAT_RGB565``
-  reason is SDL_Image + libpng 1.6 converts this 4-bit grayscale image to RGB565
+  reason is SDL_image + libpng 1.6 converts this 4-bit grayscale image to RGB565
   while SDL_pnglite converts it to a paletted surface.
+- ``tm3n3p02.png: pixel format mismatch spl SDL_PIXELFORMAT_INDEX8 si SDL_PIXELFORMAT_ABGR8888``
+  SDL_image converts this 2bpp paletted image to a completely bogus format and I don't know why.
 - Also, ``IMG_LoadPNG_RW()`` incorrectly sets greyscale/rgb colorkeys. How this doesn't show up in tests I cannot fathom.

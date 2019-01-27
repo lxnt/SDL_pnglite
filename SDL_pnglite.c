@@ -379,20 +379,15 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                     }
                 }
             }
-#if !defined(USE_PALETTE_API)
-            SDL_memcpy(surface->format->palette->colors, colorset,
-                                png.palette_size * sizeof(SDL_Color));
-            surface->format->palette->ncolors = png.palette_size;
-#else
-            if (NULL == (palette = SDL_AllocPalette(256)))
+            if (NULL == (palette = SDL_AllocPalette(png.palette_size)))
                 goto error;
 
-            if (SDL_SetPaletteColors(palette, colorset, 0, 256))
+            if (SDL_SetPaletteColors(palette, colorset, 0, png.palette_size))
                 goto error;
 
             if (SDL_SetSurfacePalette(surface, palette))
                 goto error;
-#endif
+
             if (colorkey != -1)
                 if (SDL_SetColorKey(surface, SDL_TRUE, colorkey))
                     goto error;
