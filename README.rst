@@ -16,15 +16,17 @@ PNG ancillary chunks
 --------------------
 
 Of ancillary chunks only tRNS is parsed. Others are silently ignored.
-No access to them is provided.
+No access to them is provided. Spec violations in those chunks contents
+or in their order are also ignored.
 
 
 Image and chunk sizes
 ---------------------
 
-By default, maximum size of parsed chunks and maximum size
-of resulting image data not counting palette is limited to (1<<31)-1 bytes.
-This is configurable.
+As per spec, maximum size of chunks is limited to (1<<31)-1 bytes.
+
+Maximum size of resulting image data not counting palette is also
+limited to the same value.
 
 
 PNG per-channel depth
@@ -117,6 +119,8 @@ the supplied callbacks are thread-safe themselves.
 SDL_Surface wrapper for the above
 *********************************
 
+Depends on SDL2.
+
 All above caveats apply.
 
 
@@ -144,9 +148,7 @@ SDL_SavePNG() / SDL_SavePNG_RW():
 Notable differences from IMG_LoadPNG_RW():
 ==========================================
 
-- SDL_PIXELFORMAT_RGBA8888 is used instead of SDL_PIXELFORMAT_ABGR8888
-- Interlaced images are not accepted
-- 16 bit per channel are not accepted.
+- 16 bit per channel images are not accepted.
 
 
 Notable differences from IMG_SavePNG_RW():
@@ -177,8 +179,8 @@ Test strategy for saving:
 - For each image in the test suite, load it, then save to a memory buffer,
   then load from the buffer with IMG_LoadPNG_RW(). Compare pixelformats and pixel data.
 
-Test image set:
----------------
+Test image sets:
+----------------
 
 - get PngSuite from http://www.schaik.com/pngsuite/
 - google up the Google Image Test Suite PNG part.
@@ -197,5 +199,4 @@ Known issues:
   reason is SDL_image + libpng 1.6 converts this 4-bit grayscale image to RGB565
   while SDL_pnglite converts it to a paletted surface.
 - ``tm3n3p02.png: pixel format mismatch spl SDL_PIXELFORMAT_INDEX8 si SDL_PIXELFORMAT_ABGR8888``
-  SDL_image converts this 2bpp paletted image to a completely bogus format and I don't know why.
-- Also, ``IMG_LoadPNG_RW()`` incorrectly sets greyscale/rgb colorkeys. How this doesn't show up in tests I cannot fathom.
+  SDL_image converts this 2-bit paletted image to a completely bogus format and I don't know why.
