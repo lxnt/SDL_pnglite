@@ -1,6 +1,6 @@
 /*  pnglite.h - Interface for pnglite library
     Copyright (c) 2007 Daniel Karling
-        Copyright (c) 2012 Alexander Sabourenkov
+        Copyright (c) 2019 Alexander Sabourenkov
 
     This software is provided 'as-is', without any express or implied
     warranty. In no event will the authors be held liable for any damages
@@ -25,8 +25,6 @@
     daniel.karling@gmail.com
  */
 
-
-#include <stdio.h>
 #ifndef _PNGLITE_H_
 #define _PNGLITE_H_
 
@@ -80,13 +78,20 @@ enum {
 /* Typedefs for callbacks. */
 typedef size_t (*png_write_callback_t)(void* input, size_t size, size_t numel, void* user_pointer);
 typedef size_t (*png_read_callback_t)(void* output, size_t size, size_t numel, void* user_pointer);
-typedef void (*png_free_t)(void* p);
+typedef void   (*png_free_t)(void* p);
 typedef void * (*png_alloc_t)(size_t s);
 
 typedef struct {
     void*                   zs;             /* pointer to z_stream */
-    png_read_callback_t     read_fun;
-    png_write_callback_t    write_fun;
+    int                     zerr;           /* last zlib call status */
+    const char*             zmsg;           /* message for the last err or NULL */
+
+    png_read_callback_t     read;
+    png_write_callback_t    write;
+    png_alloc_t             alloc;
+    png_free_t              free;
+    size_t                  chunk_size_limit;
+    size_t                  image_data_limit;
     void*                   user_pointer;
 
     unsigned char*          png_data;
@@ -109,131 +114,69 @@ typedef struct {
 } png_t;
 
 /**
- *  This function initializes pnglite. The parameters can be used to set your
- *  own memory allocation routines following these formats:
+ * Initializes a png_t object.
  *
- *    > void* (*custom_alloc)(size_t s)
- *    > void (*custom_free)(void* p)
- *   Parameters:
- *       pngalloc - Pointer to custom allocation routine.
- *                  If 0 is passed, malloc from libc will be used.
- *       pngfree -  Pointer to custom free routine. If 0 is passed,
- *                  free from libc will be used.
+ * @param png -       A png_t structure to init.
+ * @param user_pointer - what to pass to reader/writer
+ * @param read_fun -  a reader . may be 0 if writing
+ * @param write_fun - a writer. may be 0 if reading
+ * @param pngalloc -  Pointer to custom allocation routine.
+ *                   If 0 is passed, malloc from libc will be used.
+ * @param pngfree -   Pointer to custom free routine. If 0 is passed,
+ *                   free from libc will be used.
+ * @param chunk_size_limit - reject PNGs with chunks sized over this limit 0 = (1<<31)-1
+ * @param image_data_limit - reject PNGs where resulting image is over this limit. same as above.
  *
- *   Returns:
- *       Always returns PNG_NO_ERROR.
+ * @return PNG_WRONG_ARGUMENTS if both reader and writer are 0; PNG_NO_ERROR otherwise.
  */
 
-int png_init(png_alloc_t pngalloc, png_free_t pngfree, unsigned chunk_size_limit, unsigned image_size_limit);
+int png_init(png_t *png, void* user_pointer,
+             png_read_callback_t read_fun, png_read_callback_t write_fun,
+             png_alloc_t pngalloc, png_free_t pngfree,
+             size_t chunk_size_limit, size_t image_data_limit);
 
-/*
-    Function: png_open_file
+/**
+ * Reads and checks a header from the stream.
+ *
+ * @param png png_t object set for reading.
+ * @return PNG_NO_ERROR on success, otherwise an error code.
+ */
+int png_read_header(png_t* png);
 
-    This function is used to open a png file with the internal file IO system. This function should be used instead of
-    png_open if no custom read function is used.
+/**
+ * Writes decoded image data into given buffer.
+ *
+ * @param png the png_t object
+ * @param data the output buffer,
+ *    not less than width*height*(bytes per pixel) bytes.
+ *
+ * @return PNG_NO_ERROR on success, otherwise an error code.
+ */
+int png_read_image(png_t* png, unsigned char* data);
 
-    Parameters:
-        png - Empty png_t struct.
-        filename - Filename of the file to be opened.
+/**
+ * Writes out given image data.
+ *
+ * @param width
+ * @param height
+ * @param depth
+ * @param color
+ * @param transparency
+ * @param data
+ *
+ * @return PNG_NO_ERROR on success, otherwise an error code.
+ */
+int png_write_image(png_t* png, unsigned width, unsigned height, char depth, int color, int transparency, unsigned char* data);
 
-    Returns:
-        PNG_NO_ERROR on success, otherwise an error code.
-*/
+/**
+ * Returns a string representation of an error code
+ *
+ * @param error - Error code.
+ *
+ * @return pointer to string.
+ */
 
-int png_open_file(png_t *png, const char* filename);
-
-int png_open_file_read(png_t *png, const char* filename);
-int png_open_file_write(png_t *png, const char* filename);
-
-/*
-    Function: png_open
-
-    This function reads or writes a png from/to the specified callback. The callbacks should be of the format:
-
-    > size_t (*png_write_callback_t)(void* input, size_t size, size_t numel, void* user_pointer);
-    > size_t (*png_read_callback_t)(void* output, size_t size, size_t numel, void* user_pointer).
-
-    Only one callback has to be specified. The read callback in case of PNG reading, otherwise the write callback.
-
-    Writing:
-    The callback will be called like fwrite.
-
-    Reading:
-    The callback will be called each time pnglite needs more data. The callback should read as much data as requested,
-    or return 0. This should always be possible if the PNG is sane. If the output-buffer is a null-pointer the callback
-    should only skip ahead the specified number of elements. If the callback is a null-pointer the user_pointer will be
-    treated as a file pointer (use png_open_file instead).
-
-    Parameters:
-        png - png_t struct
-        read_fun - Callback function for reading.
-        user_pointer - User pointer to be passed to read_fun.
-
-    Returns:
-        PNG_NO_ERROR on success, otherwise an error code.
-*/
-
-int png_open(png_t* png, png_read_callback_t read_fun, void* user_pointer);
-
-int png_open_read(png_t* png, png_read_callback_t read_fun, void* user_pointer);
-int png_open_write(png_t* png, png_write_callback_t write_fun, void* user_pointer);
-
-/*
-    Function: png_print_info
-
-    This function prints some info about the opened png file to stdout.
-
-    Parameters:
-        png - png struct to get info from.
-*/
-
-void png_print_info(png_t* png);
-
-/*
-    Function: png_error_string
-
-    This function translates an error code to a human readable string.
-
-    Parameters:
-        error - Error code.
-
-    Returns:
-        Pointer to string.
-*/
-
-char* png_error_string(int error);
-
-/*
-    Function: png_get_data
-
-    This function decodes the opened png file and stores the result in data. data should be big enough to hold the decoded png. Required size will be:
-
-    > width*height*(bytes per pixel)
-
-    Parameters:
-        data - Where to store result.
-
-    Returns:
-        PNG_NO_ERROR on success, otherwise an error code.
-*/
-
-int png_get_data(png_t* png, unsigned char* data);
-
-int png_set_data(png_t* png, unsigned width, unsigned height, char depth, int color, int transparency, unsigned char* data);
-
-/*
-    Function: png_close_file
-
-    Closes an open png file pointer. Should only be used when the png has been opened with png_open_file.
-
-    Parameters:
-        png - png to close.
-
-    Returns:
-        PNG_NO_ERROR
-*/
-
-int png_close_file(png_t* png);
+const char* png_error_string(int error);
 
 #ifdef __cplusplus
 }

@@ -2,27 +2,18 @@
     For conditions of distribution and use, see copyright notice in pnglite.h
 */
 
-#ifdef PNGLITE_STDIO
-#include <stdio.h>
-#endif
-
 #include <stdlib.h>
 #include <string.h>
 
 #include "zlib.h"
 #include "pnglite.h"
 
-static png_alloc_t png_alloc;
-static png_free_t png_free;
-static unsigned image_data_limit;
-static unsigned chunk_size_limit;
-
 static size_t
 file_read(png_t* png, void* out, size_t size, size_t numel)
 {
     size_t result = 0;
-    if(png->read_fun) {
-        result = png->read_fun(out, size, numel, png->user_pointer);
+    if(png->read) {
+        result = png->read(out, size, numel, png->user_pointer);
     }
     return result;
 }
@@ -32,8 +23,8 @@ file_write(png_t* png, void* p, size_t size, size_t numel)
 {
     size_t result = 0;
 
-    if(png->write_fun) {
-        result = png->write_fun(p, size, numel, png->user_pointer);
+    if(png->write) {
+        result = png->write(p, size, numel, png->user_pointer);
     }
     return result;
 }
@@ -93,22 +84,34 @@ set_ul(unsigned char* buf, unsigned in)
 }
 
 int
-png_init(png_alloc_t pngalloc, png_free_t pngfree, unsigned csl, unsigned idl)
+png_init(png_t *png, void* user_pointer,
+         png_read_callback_t read_fun, png_read_callback_t write_fun,
+         png_alloc_t pngalloc, png_free_t pngfree, size_t csl, size_t idl)
 {
     if(pngalloc)
-        png_alloc = pngalloc;
+        png->alloc = pngalloc;
     else
-        png_alloc = &malloc;
+        png->alloc = malloc;
 
     if(pngfree)
-        png_free = pngfree;
+        png->free = pngfree;
     else
-        png_free = &free;
+        png->free = free;
 
-    chunk_size_limit = csl;
-    image_data_limit = idl;
+    png->read = read_fun;
+    png->write = write_fun;
+    const size_t chunk_size_max = (1L<<31) - 1;
+    png->chunk_size_limit = (csl != 0 && csl < chunk_size_max) ? csl: chunk_size_max;
+    png->image_data_limit = (idl != 0 && idl < chunk_size_max) ? idl: chunk_size_max;
+    png->user_pointer = user_pointer;
 
     return PNG_NO_ERROR;
+}
+
+static int
+png_init_copy(const png_t *src, png_t *dst)
+{
+    return png_init(dst, src->user_pointer, src->read, src->write, src->alloc, src->free, src->chunk_size_limit, src->image_data_limit);
 }
 
 static int
@@ -259,9 +262,9 @@ png_check_png(png_t* png)
            channels[png->color_type], png->interlace_method, png->stride, png->pitch);
 #endif
 
-    if (png->stride * png->width * png->height > image_data_limit) {
+    if (png->stride * png->width * png->height > png->image_data_limit) {
 #ifdef TRACE
-        fprintf(stderr, "png_check_png(): image size over limit (%d), aborting.\n", image_data_limit);
+        fprintf(stderr, "png_check_png(): image size over limit (%d), aborting.\n", png->image_data_limit);
 #endif
         return PNG_IMAGE_TOO_BIG;
     }
@@ -367,53 +370,13 @@ png_write_ihdr(png_t* png)
     return png_calc_write_crc(png, "IHDR", ihdr + 4, 13);
 }
 
-void
-png_print_info(png_t* png)
-{
-    fprintf(stderr, "PNG INFO:\n");
-    fprintf(stderr, "\twidth:\t\t%d\n", png->width);
-    fprintf(stderr, "\theight:\t\t%d\n", png->height);
-    fprintf(stderr, "\tdepth:\t\t%d\n", png->depth);
-    fprintf(stderr, "\tcolor:\t\t");
-
-    switch(png->color_type) {
-    case PNG_GREYSCALE:
-        fprintf(stderr, "greyscale\n");
-        break;
-    case PNG_TRUECOLOR:
-        fprintf(stderr, "truecolor\n");
-        break;
-    case PNG_INDEXED:
-        fprintf(stderr, "palette\n");
-        break;
-    case PNG_GREYSCALE_ALPHA:
-        fprintf(stderr, "greyscale with alpha\n");
-        break;
-    case PNG_TRUECOLOR_ALPHA:
-        fprintf(stderr, "truecolor with alpha\n");
-        break;
-    default:
-        fprintf(stderr, "unknown, this is not good\n");
-        break;
-    }
-    fprintf(stderr, "\ttransparency:\t%s\n", png->transparency_present ? "yes": "no");
-    fprintf(stderr, "\tcompression:\t%s\n", png->compression_method?"unknown, this is not good":"inflate/deflate");
-    fprintf(stderr, "\tfilter:\t\t%s\n",    png->filter_method?"unknown, this is not good":"adaptive");
-    fprintf(stderr, "\tinterlace:\t%s\n",   png->interlace_method?"interlace":"no interlace");
-    fprintf(stderr, "\tpitch:\t\t%d\n",     png->pitch);
-}
-
 int
-png_open_read(png_t* png, png_read_callback_t read_fun, void* user_pointer)
+png_read_header(png_t* png)
 {
     char header[8];
     int result;
 
-    png->read_fun = read_fun;
-    png->write_fun = 0;
-    png->user_pointer = user_pointer;
-
-    if (!read_fun || !user_pointer)
+    if (!png->read)
         return PNG_WRONG_ARGUMENTS;
 
     if (file_read(png, header, 1, 8) != 8)
@@ -427,82 +390,23 @@ png_open_read(png_t* png, png_read_callback_t read_fun, void* user_pointer)
     return result;
 }
 
-int
-png_open_write(png_t* png, png_write_callback_t write_fun, void* user_pointer)
+static void *
+z_alloc_func(void *png, uInt items, uInt size)
 {
-    png->write_fun = write_fun;
-    png->read_fun = 0;
-    png->user_pointer = user_pointer;
-
-    if (!write_fun || !user_pointer)
-        return PNG_WRONG_ARGUMENTS;
-
-    return PNG_NO_ERROR;
+    return ((png_t *)png)->alloc(items*size);
 }
 
-int
-png_open(png_t* png, png_read_callback_t read_fun, void* user_pointer)
+static void
+z_free_func(void *png, void *ptr)
 {
-    return png_open_read(png, read_fun, user_pointer);
+    ((png_t *)png)->free(ptr);
 }
-
-#ifdef PNGLITE_STDIO
-static size_t
-png_stdio_read_fun(void* buf, size_t size, size_t num, void* user_pointer)
-{
-    if(!buf) {
-        return fseek(user_pointer, (long)(size*num), SEEK_CUR);
-    } else {
-        return fread(buf, size, num, user_pointer);
-    }
-}
-static size_t
-png_stdio_write_fun(void* buf, size_t size, size_t num, void* user_pointer)
-{
-    return fwrite(buf, size, num, user_pointer);
-}
-int
-png_open_file_read(png_t *png, const char* filename)
-{
-    FILE* fp = fopen(filename, "rb");
-
-    if(!fp)
-        return PNG_FILE_ERROR;
-
-    return png_open_read(png, png_stdio_read_fun, fp);
-}
-
-int
-png_open_file_write(png_t *png, const char* filename)
-{
-    FILE* fp = fopen(filename, "wb");
-
-    if(!fp)
-        return PNG_FILE_ERROR;
-
-    return png_open_write(png, png_stdio_write_fun, fp);
-}
-
-int
-png_open_file(png_t *png, const char* filename)
-{
-    return png_open_file_read(png, filename);
-}
-
-int
-png_close_file(png_t* png)
-{
-    fclose(png->user_pointer);
-
-    return PNG_NO_ERROR;
-}
-#endif
 
 static int
 png_init_inflate(png_t* png)
 {
     z_stream *stream;
-    png->zs = png_alloc(sizeof(z_stream));
+    png->zs = png->alloc(sizeof(z_stream));
 
     stream = png->zs;
 
@@ -510,8 +414,13 @@ png_init_inflate(png_t* png)
         return PNG_MEMORY_ERROR;
 
     memset(stream, 0, sizeof(z_stream));
-    if(inflateInit(stream) != Z_OK)
+    stream->opaque = png;
+    stream->zalloc = z_alloc_func;
+    stream->zfree = z_free_func;
+
+    if( (png->zerr= inflateInit(stream)) != Z_OK) {
         return PNG_ZLIB_ERROR;
+    }
 
     stream->next_out = png->png_data;
     stream->avail_out = png->png_datalen;
@@ -522,6 +431,7 @@ png_init_inflate(png_t* png)
 static int
 png_end_inflate(png_t* png)
 {
+    int result = PNG_NO_ERROR;
     z_stream *stream = png->zs;
 
     if(!stream) { return PNG_MEMORY_ERROR; }
@@ -529,17 +439,19 @@ png_end_inflate(png_t* png)
 #ifdef TRACE
     fprintf(stderr, "png_end_inflate(): decompressed total_out: %lu\n", stream->total_out);
 #endif
-    if(inflateEnd(stream) != Z_OK) { return PNG_ZLIB_ERROR; }
+    if((png->zerr = inflateEnd(stream)) != Z_OK) {
+        png->zmsg = stream->msg;
+        result = PNG_ZLIB_ERROR;
+    }
 
-    png_free(png->zs);
+    png->free(png->zs);
 
-    return PNG_NO_ERROR;
+    return result;
 }
 
 static int
 png_inflate(png_t* png, unsigned char* data, int len)
 {
-    int result = Z_OK;
     z_stream *stream = png->zs;
 
     if(!stream)
@@ -548,26 +460,17 @@ png_inflate(png_t* png, unsigned char* data, int len)
     stream->next_in = (unsigned char*)data;
     stream->avail_in = len;
 
-    // we can get into situation when there is more
-    // data that can be decompressed than we actually
-    // need. so our estimation of final data size
-    // must be correct or at least overestimate only.
-    /* while (result != Z_STREAM_END) {
+    png->zerr = inflate(stream, Z_SYNC_FLUSH);
 
-        if (result == Z_OK) { // ehrm, moar buffer needed?
-            // dere somehow
-        }
-    }*/
-    result = inflate(stream, Z_SYNC_FLUSH);
-
-    if(result != Z_STREAM_END && result != Z_OK) {
+    if(png->zerr != Z_STREAM_END && png->zerr != Z_OK) {
 #ifdef TRACE
         fprintf(stderr, "png_inflate(): zlib error: %s\n", stream->msg);
 #endif
+        png->zmsg = stream->msg;
         return PNG_ZLIB_ERROR;
     }
 
-    if(stream->avail_in != 0) {
+    if(stream->avail_in != 0) { /* FIXME: not an error exactly. a warning ? */
 #ifdef TRACE
         fprintf(stderr, "png_inflate(): zlib error: stream->avail_in != 0 : %d\n", stream->avail_in);
         fprintf(stderr, "png_inflate(): len was %d; total_out = %lu\n", len, stream->total_out);
@@ -594,7 +497,7 @@ png_write_idats(png_t* png, unsigned char* data)
     int err;
 
     size = 8 + compressBound(png->height * png->pitch) + 4;
-    idat = png_alloc(size);
+    idat = png->alloc(size);
 
     if (!idat) {
         err = PNG_MEMORY_ERROR;
@@ -605,8 +508,8 @@ png_write_idats(png_t* png, unsigned char* data)
 
     written = size - 12;
 
-    err = compress(idat + 8, &written, data, png->height * ( png->pitch + 1));
-    if (err != Z_OK) {
+    png->zerr = compress(idat + 8, &written, data, png->height * ( png->pitch + 1));
+    if (png->zerr != Z_OK) {
         err = PNG_ZLIB_ERROR;
         goto done;
     }
@@ -632,7 +535,7 @@ png_write_idats(png_t* png, unsigned char* data)
     err =  PNG_NO_ERROR;
 
   done:
-    png_free(idat);
+    png->free(idat);
     return err;
 }
 
@@ -645,7 +548,7 @@ png_read_idat(png_t* png, unsigned firstlen)
     unsigned length = firstlen;
     unsigned old_len = length;
 
-    chunk = png_alloc(firstlen);
+    chunk = png->alloc(firstlen);
 
     if (!chunk)
         return PNG_MEMORY_ERROR;
@@ -654,14 +557,14 @@ png_read_idat(png_t* png, unsigned firstlen)
 
     if(result != PNG_NO_ERROR) {
         png_end_inflate(png);
-        png_free(chunk);
+        png->free(chunk);
         return result;
     }
 
     do {
         if(file_read(png, chunk, 1, length) != length) {
             png_end_inflate(png);
-            png_free(chunk);
+            png->free(chunk);
             return PNG_FILE_ERROR;
         }
 
@@ -678,18 +581,18 @@ png_read_idat(png_t* png, unsigned firstlen)
         if ((result = file_read_ul(png, &length)) != PNG_NO_ERROR)
             break;
 
-        if (length > chunk_size_limit) {
+        if (length > png->chunk_size_limit) {
 #ifdef TRACE
             fprintf(stderr, "png_read_idat(): aborting on chunk size %d (over user limit of %d)\n", length, chunk_size_limit);
 #endif
-            png_free(chunk);
+            png->free(chunk);
             return PNG_OVERSIZE_CHUNK;
 
         }
 
         if(length > old_len) {
-            png_free(chunk);
-            chunk = png_alloc(length);
+            png->free(chunk);
+            chunk = png->alloc(length);
             if (!chunk) {
                 result = PNG_MEMORY_ERROR;
                 break;
@@ -714,7 +617,7 @@ png_read_idat(png_t* png, unsigned firstlen)
         result = PNG_CORRUPTED;
     }
 
-    png_free(chunk);
+    png->free(chunk);
     png_end_inflate(png);
 
     return result;
@@ -731,7 +634,7 @@ png_process_chunk(png_t* png)
 
     if (file_read(png, &type, 4, 1) != 1) { return PNG_EOF_ERROR; }
 
-    if (length > chunk_size_limit) {
+    if (length > png->chunk_size_limit) {
 #ifdef TRACE
         char *chtype = (char *)(&type);
         fprintf(stderr, "png_process_chunk() aborting on chunk '%c%c%c%c' length %u : over chunk size limit %u\n",
@@ -807,7 +710,7 @@ png_process_chunk(png_t* png)
         /*  if we found an idat, all other idats should follow
             with no other chunks in between */
         png->png_datalen = get_decompressed_data_size(png);
-        png->png_data = png_alloc(png->png_datalen);
+        png->png_data = png->alloc(png->png_datalen);
 
         if(!png->png_data)
             return PNG_MEMORY_ERROR;
@@ -852,7 +755,8 @@ png_write_plte(png_t *png)
     return png_calc_write_crc(png, "PLTE", plte + 8, length);
 }
 
-static int png_write_trns(png_t *png)
+static int
+png_write_trns(png_t *png)
 {
     unsigned char trns[4 + 4 + 256 + 4];
     unsigned i;
@@ -919,7 +823,8 @@ png_filter(png_t* png, unsigned char* data)
     return PNG_NO_ERROR;
 }
 
-static int png_unfilter(png_t* png, unsigned char* data)
+static int
+png_unfilter(png_t* png, unsigned char* data)
 {
     unsigned i, p, t;
     unsigned char a, b, c;
@@ -1011,7 +916,7 @@ png_unpack_byte(unsigned char *dst, unsigned char *src, int depth)
     }
 }
 
-int
+static int
 png_unfilter_unpack(png_t *png, unsigned char *data)
 {
     int result;
@@ -1025,7 +930,7 @@ png_unfilter_unpack(png_t *png, unsigned char *data)
     fprintf(stderr, "png_unfilter_unpack(): got data=%p\n", data);
 #endif
     if (png->depth < 8) {
-        packed_data = png_alloc(png->height * png->pitch);
+        packed_data = png->alloc(png->height * png->pitch);
 
         if (!packed_data)
             return PNG_MEMORY_ERROR;
@@ -1033,7 +938,7 @@ png_unfilter_unpack(png_t *png, unsigned char *data)
         result = png_unfilter(png, packed_data);
 
         if (result != PNG_NO_ERROR) {
-            png_free(packed_data);
+            png->free(packed_data);
             return result;
         }
 
@@ -1066,7 +971,7 @@ png_unfilter_unpack(png_t *png, unsigned char *data)
             }
         }
 
-        png_free(packed_data);
+        png->free(packed_data);
     } else {
         result = png_unfilter(png, data);
     }
@@ -1074,12 +979,13 @@ png_unfilter_unpack(png_t *png, unsigned char *data)
 }
 
 /* Intentionally done the dumbest way possible. Who ever interlaces PNGs nowadays? Focus on correctness */
-int
+static int
 png_deinterlace(png_t* png, unsigned char *data)
 {
     int result = PNG_NO_ERROR;
     png_t subpng;
     /* set up invariants for subimages */
+    png_init_copy(png, &subpng);
     subpng.color_type = png->color_type;
     subpng.filter_method = png->filter_method;
     subpng.compression_method = 0;
@@ -1115,7 +1021,7 @@ png_deinterlace(png_t* png, unsigned char *data)
 #endif
     /* allocate subdata for the last pass, that would be all the most we need for any of the passes */
     int subdata_max = (png->width * bytes_per_pixel(png->depth, png->color_type)) * ( png->height/2 + 1);
-    subdata = png_alloc(subdata_max);
+    subdata = png->alloc(subdata_max);
     if (subdata == NULL) {
         return PNG_MEMORY_ERROR;
     }
@@ -1157,7 +1063,7 @@ png_deinterlace(png_t* png, unsigned char *data)
             fprintf(stderr, "png_deinterlace() pass %d: not enough data (end-of-pass-data at %u > png_datalen %u)\n",
                    pass + 1, offset, png->png_datalen);
 #endif
-            png_free(subdata);
+            png->free(subdata);
             return PNG_CORRUPTED;
         }
         result = png_unfilter_unpack(&subpng, subdata);
@@ -1165,7 +1071,7 @@ png_deinterlace(png_t* png, unsigned char *data)
 #ifdef TRACE
             fprintf(stderr, "png_deinterlace() pass %d: freeing subdata at %p\n", pass + 1, (void *)subdata);
 #endif
-            png_free(subdata);
+            png->free(subdata);
             return result;
         }
         /* not optimizing it - not worth the time */
@@ -1214,12 +1120,12 @@ png_deinterlace(png_t* png, unsigned char *data)
 #ifdef TRACE
     fprintf(stderr, "png_deinterlace(): %d pixels set of %dx%d =%d  at %p maxoffs=%d \n", n, png->width, png->height, png->width * png->height, data, maxoffs);
 #endif
-    png_free(subdata);
+    png->free(subdata);
     return result;
 }
 
 int
-png_get_data(png_t* png, unsigned char* data)
+png_read_image(png_t* png, unsigned char* data)
 {
     int result = PNG_NO_ERROR;
 
@@ -1232,7 +1138,7 @@ png_get_data(png_t* png, unsigned char* data)
     }
     if(result != PNG_DONE) {
         if (png->png_data) {
-            png_free(png->png_data);
+            png->free(png->png_data);
         }
         return result;
     }
@@ -1248,17 +1154,19 @@ png_get_data(png_t* png, unsigned char* data)
     } else {
         result = png_unfilter_unpack(png, data);
     }
-    png_free(png->png_data);
+    png->free(png->png_data);
     return result;
 }
 
 int
-png_set_data(png_t* png, unsigned width, unsigned height, char depth,
+png_write_image(png_t* png, unsigned width, unsigned height, char depth,
                         int color, int transparency, unsigned char* data)
 {
     unsigned i;
     int err;
     unsigned char *filtered;
+
+    if (!png->write) { return PNG_WRONG_ARGUMENTS; }
 
     png->width = width;
     png->height = height;
@@ -1272,7 +1180,7 @@ png_set_data(png_t* png, unsigned width, unsigned height, char depth,
     if (rv_pcp)
         return rv_pcp;
 
-    filtered = png_alloc((png->pitch + 1) * height);
+    filtered = png->alloc((png->pitch + 1) * height);
     if (!filtered)
         return PNG_MEMORY_ERROR;
 
@@ -1286,25 +1194,25 @@ png_set_data(png_t* png, unsigned width, unsigned height, char depth,
 
     if (png->color_type == PNG_INDEXED) {
         if ((err = png_write_plte(png))) {
-            png_free(filtered);
+            png->free(filtered);
             return err;
         }
     }
 
     if (transparency) {
         if ((err = png_write_trns(png))) {
-            png_free(filtered);
+            png->free(filtered);
             return err;
         }
     }
 
     png_write_idats(png, filtered);
-    png_free(filtered);
+    png->free(filtered);
 
     return PNG_NO_ERROR;
 }
 
-char* png_error_string(int error)
+const char* png_error_string(int error)
 {
     switch(error) {
     case PNG_NO_ERROR:

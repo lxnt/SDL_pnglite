@@ -1,7 +1,7 @@
 /*
   SDL_pnglite: An example PNG loader/writer for adding to SDL
 
-  Copyright (C) 2012-2016 Alexander Sabourenkov <llxxnntt@gmail.com>
+  Copyright (C) 2012-2019 Alexander Sabourenkov <llxxnntt@gmail.com>
 
 
   This software is provided 'as-is', without any express or implied
@@ -74,6 +74,16 @@ extern DECLSPEC int SDLCALL SDL_SavePNG_RW
  */
 #define SDL_SavePNG(surface, file) \
                 SDL_SavePNG_RW(surface, SDL_RWFromFile(file, "wb"), 1)
+
+/**
+ *  Check if a stream has PNG sequence and a valid IHDR chunk.
+ *
+ *  Rewinds the rwops after the check.
+ *
+ *  \return 1 if header is valid, 0 if PNG signature is missing
+ *          or -1 if there was an error.
+ */
+extern DECLSPEC int SDLCALL SDL_HeaderCheckPNG(SDL_RWops * src);
 
 /* Ends C function definitions when using C++ */
 #ifdef __cplusplus

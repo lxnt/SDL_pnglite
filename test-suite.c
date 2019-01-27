@@ -169,7 +169,7 @@ done:
     return rv;
 }
 
-int test_load(const char *fname, int expected_ok, int loud) {
+int test_load(const char *fname, int expected_ok, int loud, int no_si) {
     SDL_Surface *si_surf, *spl_surf;
     int rv = 0;
 
@@ -185,6 +185,12 @@ int test_load(const char *fname, int expected_ok, int loud) {
     } else if (loud) {
         fprintf(stderr, "    size %dx%d pitch=%d pf=%s\n",
             spl_surf->w, spl_surf->h, spl_surf->pitch, SDL_GetPixelFormatName(spl_surf->format->format));
+    }
+    if (no_si) {
+        if (spl_surf) {
+            SDL_FreeSurface(spl_surf);
+        }
+        return rv;
     }
     if (loud) {
         fprintf(stderr, "IMG_Load():\n");
@@ -264,16 +270,17 @@ int test_save(const char *fname, int expected_ok, int loud) {
 }
 
 int main(int argc, char *argv[]) {
-    int i, fails = 0, loud = 0, failcount = 0;
+    int i, fails = 0, loud = 0, failcount = 0, no_si = 0;
     char *fname;
 
     loud = getenv("LOUD") != NULL;
+    no_si = getenv("NOSI") != NULL;
 
     fprintf(stderr, "=== TEST LOAD =====================================\n");
     for (i = 1; i < argc; i++) {
         fname = argv[i];
         if (loud) { fprintf(stderr, "%s : \n", fname); }
-        fails = test_load(fname, expected_ok(fname), loud);
+        fails = test_load(fname, expected_ok(fname), loud, no_si);
         failcount += fails;
         if (loud) {
             if (fails == 0) {

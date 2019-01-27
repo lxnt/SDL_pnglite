@@ -183,6 +183,6 @@ Known issues:
   via SDL API (``SDL_AllocPalette()`` / ``SDL_SetSurfacePalette()``). Right now SDL_pnglite
   creates short palettes, otherwise test-suite will dutifully show palette mismatches.
 - ``tbbn0g04.png: pixel format mismatch spl SDL_PIXELFORMAT_INDEX8 si SDL_PIXELFORMAT_RGB565``
-  reason is libpng 1.6 returns 2 channels and bit_depth of 8 for this image (no idea why, it's 4bit),
-  then num_channels*bit_depth is used as bpp in ``SDL_CreateRGBSurface()``. This is a SDL_Image's  bug.
+  reason is SDL_Image + libpng 1.6 converts this 4-bit grayscale image to RGB565
+  while SDL_pnglite converts it to a paletted surface.
 - Also, ``IMG_LoadPNG_RW()`` incorrectly sets greyscale/rgb colorkeys. How this doesn't show up in tests I cannot fathom.

@@ -1,7 +1,7 @@
 /*
   SDL_pnglite: An example PNG loader/writer for adding to SDL
 
-  Copyright (C) 2012-2016 Alexander Sabourenkov <llxxnntt@gmail.com>
+  Copyright (C) 2012-2019 Alexander Sabourenkov <llxxnntt@gmail.com>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -103,6 +103,43 @@ find_colorkey(png_t *p) {
     return -1;
 }
 
+int
+SDL_HeaderCheckPNG(SDL_RWops * src)
+{
+    Sint64 fp_offset;
+    png_t png;
+    int rv;
+
+    if (src == NULL) {
+        SDL_SetError("Passed a NULL RWops");
+        return -1;
+    }
+    fp_offset = SDL_RWtell(src);
+    if (fp_offset == -1) { return -1; }
+
+    png_init(&png, src,  rwops_read_wrapper, 0, SDL_malloc, SDL_free, 1<<26, 1<<26);
+    rv = png_read_header(&png);
+    switch(rv) {
+        case PNG_NO_ERROR:     /* good PNG header */
+            rv = 1;
+            break;
+        case PNG_HEADER_ERROR: /* no PNG header */
+            rv = 0;
+            break;
+        case PNG_EOF_ERROR:    /* problems reading PNG header */
+            rv = -1;
+            break;
+        default:               /* bad CRC? */
+            SDL_SetError("png_read_header(): %s", png_error_string(rv));
+            rv = -1;
+            break;
+    }
+    if ( -1 == SDL_RWseek(src, RW_SEEK_SET, fp_offset)) {
+        rv = -1;
+    }
+    return rv;
+}
+
 SDL_Surface *
 SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
 {
@@ -134,18 +171,15 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
         goto error;
     }
 
-    /* this is perfectly safe to call multiple times
-       as long as parameters don't change while there are
-       initialized png_t-s? yup. better fix this somehow. */
-    png_init(SDL_malloc, SDL_free, 1<<30, 1<<30);
+    png_init(&png, src, rwops_read_wrapper, 0, SDL_malloc, SDL_free, 1<<26, 1<<26);
 
     fp_offset = SDL_RWtell(src);
     if (fp_offset == -1)
         goto error;
 
-    rv = png_open_read(&png, rwops_read_wrapper, src);
+    rv = png_read_header(&png);
     if (rv != PNG_NO_ERROR) {
-        SDL_SetError("png_open_read(): %s", png_error_string(rv));
+        SDL_SetError("png_read_header(): %s", png_error_string(rv));
         goto error;
     }
 
@@ -174,7 +208,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
             if (!surface) {
                 goto error;
             }
-            rv = png_get_data(&png, surface->pixels);
+            rv = png_read_image(&png, surface->pixels);
             if (rv != PNG_NO_ERROR) {
                 SDL_SetError("png_get_data(): %s", png_error_string(rv));
                 goto error;
@@ -198,7 +232,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
             if (!surface) {
                 goto error;
             }
-            rv = png_get_data(&png, surface->pixels);
+            rv = png_read_image(&png, surface->pixels);
             if (rv != PNG_NO_ERROR) {
                 SDL_SetError("png_get_data(): %s", png_error_string(rv));
                 goto error;
@@ -229,7 +263,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 goto error;
             }
 
-            rv = png_get_data(&png, data);
+            rv = png_read_image(&png, data);
             if (rv != PNG_NO_ERROR) {
                 SDL_SetError("png_get_data(): %s", png_error_string(rv));
                 goto error;
@@ -293,7 +327,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 SDL_OutOfMemory();
                 goto error;
             }
-            rv = png_get_data(&png, data);
+            rv = png_read_image(&png, data);
             if (rv != PNG_NO_ERROR) {
                 SDL_SetError("png_get_data(): %s", png_error_string(rv));
                 goto error;
@@ -320,7 +354,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 SDL_OutOfMemory();
                 goto error;
             }
-            rv = png_get_data(&png, data);
+            rv = png_read_image(&png, data);
             if (rv != PNG_NO_ERROR) {
                 SDL_SetError("png_get_data(): %s", png_error_string(rv));
                 goto error;
@@ -486,15 +520,11 @@ SDL_SavePNG32_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
     }
 
     /* write out and be done */
-    rv = png_open_write(&png, rwops_write_wrapper, dst);
-    if (rv != PNG_NO_ERROR) {
-        SDL_SetError("png_open_write(): %s", png_error_string(rv));
-        goto error;
-    }
+    png_init(&png, dst, 0, rwops_write_wrapper, SDL_malloc, SDL_free, 1<<26, 1<<26);
 
-    rv = png_set_data(&png, tmp->w, tmp->h, 8, png_color_type, transparency_present, data);
+    rv = png_write_image(&png, tmp->w, tmp->h, 8, png_color_type, transparency_present, data);
     if (rv != PNG_NO_ERROR) {
-        SDL_SetError("png_set_data(): %s", png_error_string(rv));
+        SDL_SetError("png_write_image(): %s", png_error_string(rv));
         goto error;
     }
     rv = 0;
@@ -531,11 +561,6 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
         SDL_SetError("Passed a NULL Surface or RWops");
         goto error;
     }
-
-    /* this is perfectly safe to call multiple times
-       as long as parameters don't change */
-    png_init(SDL_malloc, SDL_free, 1<<30, 1<<30);
-
     switch (src->format->format) {
         case SDL_PIXELFORMAT_INDEX1LSB:
         case SDL_PIXELFORMAT_INDEX1MSB:
@@ -546,7 +571,6 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
         default:
             return SDL_SavePNG32_RW(src, dst, freedst);
     }
-
     data = SDL_malloc(src->w * src->h);
     if (!data) {
         SDL_Error(SDL_ENOMEM);
@@ -658,17 +682,9 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
     }
 
     /* write out and be done */
-    rv = png_open_write(&png, rwops_write_wrapper, dst);
-    if (rv != PNG_NO_ERROR) {
-        if (rv == PNG_MEMORY_ERROR) {
-            SDL_Error(SDL_ENOMEM);
-        } else if (rv != PNG_IO_ERROR) {
-            SDL_SetError("png_open_write(): %s", png_error_string(rv));
-        }
-        goto error;
-    }
+    png_init(&png, dst, 0, rwops_write_wrapper, SDL_malloc, SDL_free, 1<<26, 1<<26);
 
-    rv = png_set_data(&png, src->w, src->h, 8, PNG_INDEXED, transparency_present, data);
+    rv = png_write_image(&png, src->w, src->h, 8, PNG_INDEXED, transparency_present, data);
     if (rv != PNG_NO_ERROR) {
         if (rv == PNG_MEMORY_ERROR) {
             SDL_Error(SDL_ENOMEM);
