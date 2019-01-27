@@ -23,7 +23,8 @@ Image and chunk sizes
 ---------------------
 
 By default, maximum size of parsed chunks and maximum size
-of resulting image data not counting palette is limited to 1<<30 bytes.
+of resulting image data not counting palette is limited to (1<<31)-1 bytes.
+This is configurable.
 
 
 PNG per-channel depth
@@ -118,14 +119,14 @@ SDL_Surface wrapper for the above
 
 All above caveats apply.
 
+
 SDL_LoadPNG() / SDL_LoadPNG_RW():
 =================================
 
 - Attempts to load a png from given filename / RWops object.
 - Indexed-color images without transparency are returned as paletted surfaces.
-- Indexed-color images with transparency are returned as paletted surfaces with colorkey
-  if and only if the transparency chunks marks exacly one color as fully transparent, and
-  all others as fully opaque. Otherwise they are returned as RGBA32.
+- Indexed-color images with transparency are always returned as paletted surfaces.
+  First fully-transparent color's index is set as colorkey.
 - Truecolor+alpha and grayscale+alpha are returned as RGBA32.
 - Truecolor (no alpha) are returned as RGB24 (transparency results in colorkey).
 - Grayscale images are returned as indexed color (transparency results in colorkey).

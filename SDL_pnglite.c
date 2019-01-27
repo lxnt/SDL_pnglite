@@ -20,6 +20,7 @@
   3. This notice may not be removed or altered from any source distribution.
 */
 
+#include "SDL_version.h"
 #include "SDL_video.h"
 #include "SDL_endian.h"
 #include "SDL_pixels.h"
@@ -75,36 +76,18 @@ bit_replicate(unsigned char val, unsigned bits)
     }
 }
 
-/* determine if this paletted image can be loaded as paletted colorkeyed surface.
-    returns -1 if not, index of the colorkey palette entry otherwise. */
-static int
-find_colorkey(png_t *p) {
-    int alpha_zero_index = -1;
-    unsigned alpha_one_count = 0;
-    unsigned i, alpha;
-
-    if ((p->color_type == PNG_INDEXED) && (p->transparency_present)) {
-        for (i = 0; i < p->palette_size; i++) {
-            alpha = p->palette[i + 768];
-            switch (alpha) {
-                case 255:
-                    alpha_one_count += 1;
-                    break;
-                case 0:
-                    alpha_zero_index = i;
-                    break;
-                default:
-                    break;
-            }
-        }
-        if (alpha_one_count == (p->palette_size - 1))
-            return alpha_zero_index; /* the only transparent */
-    }
-    return -1;
-}
+#if !SDL_VERSION_ATLEAST(2,0,4)
+# if SDL_BYTEORDER == SDL_BIG_ENDIAN
+#  define SDL_PIXELFORMAT_RGBA32 SDL_PIXELFORMAT_RGBA8888
+#  define SDL_PIXELFORMAT_RGB24  SDL_PIXELFORMAT_RGB888
+# else
+#  define SDL_PIXELFORMAT_RGBA32 SDL_PIXELFORMAT_ABGR8888
+#  define SDL_PIXELFORMAT_RGB24  SDL_PIXELFORMAT_BGR888
+# endif
+#endif
 
 int
-SDL_HeaderCheckPNG(SDL_RWops * src)
+SDL_HeaderCheckPNG_RW(SDL_RWops *src, int freesrc, int *w, int *h, int *pf)
 {
     Sint64 fp_offset;
     png_t png;
@@ -117,7 +100,7 @@ SDL_HeaderCheckPNG(SDL_RWops * src)
     fp_offset = SDL_RWtell(src);
     if (fp_offset == -1) { return -1; }
 
-    png_init(&png, src,  rwops_read_wrapper, 0, SDL_malloc, SDL_free, 1<<26, 1<<26);
+    png_init(&png, src,  rwops_read_wrapper, 0, SDL_malloc, SDL_free, 0, 0);
     rv = png_read_header(&png);
     switch(rv) {
         case PNG_NO_ERROR:     /* good PNG header */
@@ -134,7 +117,36 @@ SDL_HeaderCheckPNG(SDL_RWops * src)
             rv = -1;
             break;
     }
-    if ( -1 == SDL_RWseek(src, RW_SEEK_SET, fp_offset)) {
+    if (rv == 1) {
+        if (pf) {
+            switch (png.color_type) {
+                case PNG_TRUECOLOR_ALPHA:
+                    *pf = SDL_PIXELFORMAT_RGBA32;
+                    break;
+                case PNG_TRUECOLOR:
+                    *pf = SDL_PIXELFORMAT_RGB24;
+                    break;
+                case PNG_GREYSCALE_ALPHA:
+                    *pf = SDL_PIXELFORMAT_RGBA32;
+                    break;
+                case PNG_GREYSCALE:
+                    *pf = SDL_PIXELFORMAT_INDEX8;
+                    break;
+                case PNG_INDEXED:
+                    *pf = SDL_PIXELFORMAT_INDEX8;
+                    break;
+                default:
+                    SDL_SetError("bogus color type %d", png.color_type);
+                    rv = -1;
+                    break;
+            }
+            if (w) { *w = png.width; }
+            if (h) { *h = png.height; }
+        }
+    }
+    if (freesrc) {
+        SDL_RWclose(src); /* errors only on pending writes */
+    } else if ( -1 == SDL_RWseek(src, RW_SEEK_SET, fp_offset)) {
         rv = -1;
     }
     return rv;
@@ -156,7 +168,6 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
     Uint32 Bmask = 0;
     Uint32 Amask = 0;
     Uint64 row, col;
-    Uint8 index;
     Uint8 gray_level;
     Uint8 alpha;
     Uint64 pixel; /* what if we get 3-gigapixel PNG ? */
@@ -164,14 +175,14 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
     Uint8 *packed_row;
     Uint8 *pixel_start;
     Uint32 color;
-    int colorkey; /* -1 = none */
+    int colorkey; /* -1: no palette or zero-alpha colors */
 
     if (src == NULL) {
         SDL_SetError("Passed a NULL RWops");
         goto error;
     }
 
-    png_init(&png, src, rwops_read_wrapper, 0, SDL_malloc, SDL_free, 1<<26, 1<<26);
+    png_init(&png, src, rwops_read_wrapper, 0, SDL_malloc, SDL_free, 0, 0);
 
     fp_offset = SDL_RWtell(src);
     if (fp_offset == -1)
@@ -191,19 +202,9 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
 
     switch (png.color_type) {
         case PNG_TRUECOLOR_ALPHA:
-#if SDL_BYTEORDER == SDL_BIG_ENDIAN
-            Rmask = 0xFF000000;
-            Gmask = 0x00FF0000;
-            Bmask = 0x0000FF00;
-            Amask = 0x000000FF;
-#else
-            Rmask = 0x000000FF;
-            Gmask = 0x0000FF00;
-            Bmask = 0x00FF0000;
-            Amask = 0xFF000000;
-#endif
-            /* should be no problems with pitch */
-            surface = SDL_CreateRGBSurface(0, png.width, png.height, 32,
+            SDL_PixelFormatEnumToMasks(SDL_PIXELFORMAT_RGBA32, &bpp,
+                                       &Rmask, &Gmask, &Bmask, &Amask);
+            surface = SDL_CreateRGBSurface(0, png.width, png.height, bpp,
                                            Rmask, Gmask, Bmask, Amask);
             if (!surface) {
                 goto error;
@@ -213,21 +214,19 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 SDL_SetError("png_get_data(): %s", png_error_string(rv));
                 goto error;
             }
-            goto done;
+            if ((unsigned)surface->pitch != png.pitch) {
+                for (row = png.height; row > 0; row --) {
+                    pitched_row = (Uint8 *) surface->pixels + (row-1) * surface->pitch;
+                    packed_row  = (Uint8 *) surface->pixels + (row-1) * png.pitch;
+                    SDL_memmove(pitched_row, packed_row, png.pitch);
+                }
+            }
+            break;
 
         case PNG_TRUECOLOR:
-#if SDL_BYTEORDER == SDL_BIG_ENDIAN
-            Rmask = 0x00FF0000;
-            Gmask = 0x0000FF00;
-            Bmask = 0x000000FF;
-            Amask = 0x00000000;
-#else
-            Rmask = 0x000000FF;
-            Gmask = 0x0000FF00;
-            Bmask = 0x00FF0000;
-            Amask = 0x00000000;
-#endif
-            surface = SDL_CreateRGBSurface(0, png.width, png.height, 24,
+            SDL_PixelFormatEnumToMasks(SDL_PIXELFORMAT_RGB24, &bpp,
+                                       &Rmask, &Gmask, &Bmask, &Amask);
+            surface = SDL_CreateRGBSurface(0, png.width, png.height, bpp,
                                            Rmask, Gmask, Bmask, Amask);
             if (!surface) {
                 goto error;
@@ -247,7 +246,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                                     png.colorkey[3], png.colorkey[5]);
                 SDL_SetColorKey(surface, SDL_TRUE, color);
             }
-            goto done;
+            break;
 
         case PNG_GREYSCALE:
             surface = SDL_CreateRGBSurface(0, png.width, png.height, 8,
@@ -256,8 +255,8 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 goto error;
             }
             /*  grayscale can be of any depth, and anything below 8
-                gets expanded to 8, so use stride. */
-            data = SDL_malloc(png.width * png.height * png.stride);
+                gets expanded to 8, so there. */
+            data = SDL_malloc(png.width * png.height);
             if (!data) {
                 SDL_OutOfMemory();
                 goto error;
@@ -310,11 +309,11 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 SDL_SetColorKey(surface, SDL_TRUE, gray_level);
             }
 
-            goto done;
+            break;
 
         case PNG_GREYSCALE_ALPHA:
-            SDL_PixelFormatEnumToMasks(SDL_PIXELFORMAT_RGBA8888,
-                            &bpp, &Rmask, &Gmask, &Bmask, &Amask);
+            SDL_PixelFormatEnumToMasks(SDL_PIXELFORMAT_RGBA32, &bpp,
+                                       &Rmask, &Gmask, &Bmask, &Amask);
             surface = SDL_CreateRGBSurface(0, png.width, png.height, bpp,
                                            Rmask, Gmask, Bmask, Amask);
             if (!surface) {
@@ -337,15 +336,10 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 col = pixel % png.width;
                 gray_level = *(data + 2*pixel);
                 alpha = *(data + 2*pixel + 1);
-                pixel_start = (Uint8 *) surface->pixels +
-                                        row*surface->pitch + col*4;
-
-                *pixel_start++ = alpha;
-                *pixel_start++ = gray_level;
-                *pixel_start++ = gray_level;
-                *pixel_start++ = gray_level;
+                Uint32 *pixel_ptr = (Uint32 *)((Uint8*)surface->pixels + row*surface->pitch) + col;
+                *pixel_ptr = SDL_MapRGBA(surface->format, gray_level, gray_level, gray_level, alpha);
             }
-            goto done;
+            break;
 
         case PNG_INDEXED:
             /*  indexed always ends up as 8 bits per pixel. */
@@ -359,69 +353,50 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 SDL_SetError("png_get_data(): %s", png_error_string(rv));
                 goto error;
             }
-            colorkey = find_colorkey(&png);
-            if ((png.transparency_present) && (colorkey == -1)) {
-                SDL_PixelFormatEnumToMasks(SDL_PIXELFORMAT_RGBA8888,
-                                &bpp, &Rmask, &Gmask, &Bmask, &Amask);
-                surface = SDL_CreateRGBSurface(0, png.width, png.height, bpp,
-                                               Rmask, Gmask, Bmask, Amask);
-                if (!surface) {
-                    goto error;
-                }
-                for(pixel = 0 ; pixel < png.width * png.height ; pixel++) {
-                    row = pixel / png.width;
-                    col = pixel % png.width;
-                    index = *(data + pixel);
-                    pixel_start = (Uint8*)(surface->pixels) +
-                                            row*surface->pitch + col*4;
-                    *pixel_start++ = png.palette[768 + index]; /* A */
-                    *pixel_start++ = png.palette[3*index + 2]; /* B */
-                    *pixel_start++ = png.palette[3*index + 1]; /* G */
-                    *pixel_start++ = png.palette[3*index + 0]; /* R */
+
+            surface = SDL_CreateRGBSurface(0, png.width, png.height, 8, 0, 0, 0, 0);
+            if (!surface) {
+                goto error;
+            }
+            if (surface->pitch != surface->w) {
+                for (row = png.height; row > 0; row --) {
+                    pitched_row = (Uint8 *) surface->pixels + (row-1) * surface->pitch;
+                    packed_row  = data + (row-1) * png.width;
+                    SDL_memcpy(pitched_row, packed_row, png.width);
                 }
             } else {
-                surface = SDL_CreateRGBSurface(0, png.width, png.height, 8,
-                                                0, 0, 0, 0);
-                if (!surface) {
-                    goto error;
-                }
-
-                if (surface->pitch != surface->w) {
-                    for (row = png.height; row > 0; row --) {
-                        pitched_row = (Uint8 *) surface->pixels + (row-1) * surface->pitch;
-                        packed_row  = data + (row-1) * png.width;
-                        SDL_memcpy(pitched_row, packed_row, png.width);
-                    }
-                } else {
-                    SDL_memcpy(surface->pixels, data, surface->w * surface->h);
-                }
-
-                for (col = 0; col < 256; col++) {
-                    colorset[col].r = png.palette[3*col + 0];
-                    colorset[col].g = png.palette[3*col + 1];
-                    colorset[col].b = png.palette[3*col + 2];
-                    colorset[col].a = 255;
-                }
-#if !defined(USE_PALETTE_API)
-                SDL_memcpy(surface->format->palette->colors, colorset,
-                                png.palette_size * sizeof(SDL_Color));
-                surface->format->palette->ncolors = png.palette_size;
-#else
-                if (NULL == (palette = SDL_AllocPalette(256)))
-                    goto error;
-
-                if (SDL_SetPaletteColors(palette, colorset, 0, 256))
-                    goto error;
-
-                if (SDL_SetSurfacePalette(surface, palette))
-                    goto error;
-#endif
-
-                if (colorkey != -1)
-                    if (SDL_SetColorKey(surface, SDL_TRUE, colorkey))
-                        goto error;
+                SDL_memcpy(surface->pixels, data, surface->w * surface->h);
             }
-            goto done;
+            colorkey = -1;
+            for (col = 0; col < 256; col++) {
+                colorset[col].r = png.palette[3*col + 0];
+                colorset[col].g = png.palette[3*col + 1];
+                colorset[col].b = png.palette[3*col + 2];
+                colorset[col].a = png.palette[768 + col];
+                if (colorset[col].a == 0) {
+                    if (colorkey == -1) {
+                        colorkey = col;
+                    }
+                }
+            }
+#if !defined(USE_PALETTE_API)
+            SDL_memcpy(surface->format->palette->colors, colorset,
+                                png.palette_size * sizeof(SDL_Color));
+            surface->format->palette->ncolors = png.palette_size;
+#else
+            if (NULL == (palette = SDL_AllocPalette(256)))
+                goto error;
+
+            if (SDL_SetPaletteColors(palette, colorset, 0, 256))
+                goto error;
+
+            if (SDL_SetSurfacePalette(surface, palette))
+                goto error;
+#endif
+            if (colorkey != -1)
+                if (SDL_SetColorKey(surface, SDL_TRUE, colorkey))
+                    goto error;
+            break;
 
         default:
             SDL_SetError("bogus color type %d", png.color_type);
@@ -468,13 +443,7 @@ SDL_SavePNG32_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
     int transparency_present = 0;
 
     if (src->format->Amask > 0) {
-        format = SDL_AllocFormat(
-#if SDL_BYTEORDER == SDL_LIL_ENDIAN
-                        SDL_PIXELFORMAT_ABGR8888
-#else
-                        SDL_PIXELFORMAT_RGBA8888
-#endif
-                        );
+        format = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA32);
         png_color_type = PNG_TRUECOLOR_ALPHA;
     } else {
         format = SDL_AllocFormat(SDL_PIXELFORMAT_RGB24);
@@ -520,7 +489,7 @@ SDL_SavePNG32_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
     }
 
     /* write out and be done */
-    png_init(&png, dst, 0, rwops_write_wrapper, SDL_malloc, SDL_free, 1<<26, 1<<26);
+    png_init(&png, dst, 0, rwops_write_wrapper, SDL_malloc, SDL_free, 0, 0);
 
     rv = png_write_image(&png, tmp->w, tmp->h, 8, png_color_type, transparency_present, data);
     if (rv != PNG_NO_ERROR) {
@@ -682,7 +651,7 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
     }
 
     /* write out and be done */
-    png_init(&png, dst, 0, rwops_write_wrapper, SDL_malloc, SDL_free, 1<<26, 1<<26);
+    png_init(&png, dst, 0, rwops_write_wrapper, SDL_malloc, SDL_free, 0, 0);
 
     rv = png_write_image(&png, src->w, src->h, 8, PNG_INDEXED, transparency_present, data);
     if (rv != PNG_NO_ERROR) {

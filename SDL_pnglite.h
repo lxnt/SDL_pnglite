@@ -76,14 +76,20 @@ extern DECLSPEC int SDLCALL SDL_SavePNG_RW
                 SDL_SavePNG_RW(surface, SDL_RWFromFile(file, "wb"), 1)
 
 /**
- *  Check if a stream has PNG sequence and a valid IHDR chunk.
+ * Check if a stream has PNG sequence and a valid IHDR chunk.
  *
- *  Rewinds the rwops after the check.
- *
- *  \return 1 if header is valid, 0 if PNG signature is missing
- *          or -1 if there was an error.
+ * @param src     the rwops stream
+ * @param freesrc if to close the stream. Rewinds the stream otherwise.
+ * @param w       set to image width if header is ok and w is not null
+ * @param h       set to image height if header is ok and h is not null
+ * @param pf      set to pixelformat loading this will result loading it if not null
+ * @return        1 if header is valid, 0 if PNG signature is missing
+ *                or -1 if there was an error.
  */
-extern DECLSPEC int SDLCALL SDL_HeaderCheckPNG(SDL_RWops * src);
+extern DECLSPEC int SDLCALL SDL_HeaderCheckPNG_RW(SDL_RWops *src, int freesrc, int *w, int *h, int *pf);
+
+#define SDL_HeaderCheckPNG(file, w, h, pf) \
+                SDL_HeaderCheckPNG_RW(SDL_RWFromFile(file, "wb"), 1, w, h, pf)
 
 /* Ends C function definitions when using C++ */
 #ifdef __cplusplus
