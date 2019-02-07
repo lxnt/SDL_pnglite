@@ -9,7 +9,7 @@
 #include "pnglite.h"
 
 static size_t
-file_read(png_t* png, void* out, size_t size, size_t numel)
+file_read(pnglite_t* png, void* out, size_t size, size_t numel)
 {
     size_t result = 0;
     if(png->read) {
@@ -19,7 +19,7 @@ file_read(png_t* png, void* out, size_t size, size_t numel)
 }
 
 static size_t
-file_write(png_t* png, void* p, size_t size, size_t numel)
+file_write(pnglite_t* png, void* p, size_t size, size_t numel)
 {
     size_t result = 0;
 
@@ -30,7 +30,7 @@ file_write(png_t* png, void* p, size_t size, size_t numel)
 }
 
 static int
-file_read_ul(png_t* png, unsigned *out)
+file_read_ul(pnglite_t* png, unsigned *out)
 {
     unsigned char buf[4];
 
@@ -43,7 +43,7 @@ file_read_ul(png_t* png, unsigned *out)
 }
 
 static int
-file_write_ul(png_t* png, unsigned in)
+file_write_ul(pnglite_t* png, unsigned in)
 {
     unsigned char buf[4];
 
@@ -84,9 +84,9 @@ set_ul(unsigned char* buf, unsigned in)
 }
 
 int
-png_init(png_t *png, void* user_pointer,
-         png_read_callback_t read_fun, png_read_callback_t write_fun,
-         png_alloc_t pngalloc, png_free_t pngfree, size_t csl, size_t idl)
+pnglite_init(pnglite_t *png, void* user_pointer,
+         pnglite_read_callback_t read_fun, pnglite_read_callback_t write_fun,
+         pnglite_alloc_t pngalloc, pnglite_free_t pngfree, size_t csl, size_t idl)
 {
     if(pngalloc)
         png->alloc = pngalloc;
@@ -109,9 +109,9 @@ png_init(png_t *png, void* user_pointer,
 }
 
 static int
-png_init_copy(const png_t *src, png_t *dst)
+png_init_copy(const pnglite_t *src, pnglite_t *dst)
 {
-    return png_init(dst, src->user_pointer, src->read, src->write, src->alloc, src->free, src->chunk_size_limit, src->image_data_limit);
+    return pnglite_init(dst, src->user_pointer, src->read, src->write, src->alloc, src->free, src->chunk_size_limit, src->image_data_limit);
 }
 
 static int
@@ -136,7 +136,7 @@ bytes_per_scanline(int width, int depth, int color_type)
 }
 
 static int
-get_decompressed_data_size(png_t *png)
+get_decompressed_data_size(pnglite_t *png)
 {
 /*
    zlib output buffer size for interlaced pngs:
@@ -201,7 +201,7 @@ get_decompressed_data_size(png_t *png)
 }
 
 static int
-png_check_png(png_t* png)
+png_check_png(pnglite_t* png)
 {
     if (png->width == 0 || png->height == 0) {
         return PNG_CORRUPTED;
@@ -285,7 +285,7 @@ png_calc_crc(char *name, unsigned char *chunk, unsigned length)
 }
 
 static int
-png_read_check_crc(png_t *png, char *name, unsigned char *chunk, unsigned length)
+png_read_check_crc(pnglite_t *png, char *name, unsigned char *chunk, unsigned length)
 {
     unsigned crc;
 
@@ -299,7 +299,7 @@ png_read_check_crc(png_t *png, char *name, unsigned char *chunk, unsigned length
 }
 
 static int
-png_calc_write_crc(png_t *png, char *name, unsigned char *chunk, unsigned length)
+png_calc_write_crc(pnglite_t *png, char *name, unsigned char *chunk, unsigned length)
 {
     unsigned crc;
 
@@ -312,7 +312,7 @@ png_calc_write_crc(png_t *png, char *name, unsigned char *chunk, unsigned length
 }
 
 static int
-png_read_ihdr(png_t* png)
+png_read_ihdr(pnglite_t* png)
 {
     int rv;
     unsigned length;
@@ -342,7 +342,7 @@ png_read_ihdr(png_t* png)
 }
 
 static int
-png_write_ihdr(png_t* png)
+png_write_ihdr(pnglite_t* png)
 {
     unsigned char ihdr[13 + 4];
     unsigned char *p = ihdr;
@@ -371,7 +371,7 @@ png_write_ihdr(png_t* png)
 }
 
 int
-png_read_header(png_t* png)
+pnglite_read_header(pnglite_t* png)
 {
     char header[8];
     int result;
@@ -393,17 +393,17 @@ png_read_header(png_t* png)
 static void *
 z_alloc_func(void *png, uInt items, uInt size)
 {
-    return ((png_t *)png)->alloc(items*size);
+    return ((pnglite_t *)png)->alloc(items*size);
 }
 
 static void
 z_free_func(void *png, void *ptr)
 {
-    ((png_t *)png)->free(ptr);
+    ((pnglite_t *)png)->free(ptr);
 }
 
 static int
-png_init_inflate(png_t* png)
+png_init_inflate(pnglite_t* png)
 {
     z_stream *stream;
     png->zs = png->alloc(sizeof(z_stream));
@@ -429,7 +429,7 @@ png_init_inflate(png_t* png)
 }
 
 static int
-png_end_inflate(png_t* png)
+png_end_inflate(pnglite_t* png)
 {
     int result = PNG_NO_ERROR;
     z_stream *stream = png->zs;
@@ -450,7 +450,7 @@ png_end_inflate(png_t* png)
 }
 
 static int
-png_inflate(png_t* png, unsigned char* data, int len)
+png_inflate(pnglite_t* png, unsigned char* data, int len)
 {
     z_stream *stream = png->zs;
 
@@ -488,7 +488,7 @@ png_inflate(png_t* png, unsigned char* data, int len)
 
 
 static int
-png_write_idats(png_t* png, unsigned char* data)
+png_write_idats(pnglite_t* png, unsigned char* data)
 {
     unsigned char *idat;
     unsigned long  written;
@@ -540,7 +540,7 @@ png_write_idats(png_t* png, unsigned char* data)
 }
 
 static int
-png_read_idat(png_t* png, unsigned firstlen)
+png_read_idat(pnglite_t* png, unsigned firstlen)
 {
     unsigned type = 0;
     unsigned char *chunk;
@@ -624,7 +624,7 @@ png_read_idat(png_t* png, unsigned firstlen)
 }
 
 static int
-png_process_chunk(png_t* png)
+png_process_chunk(pnglite_t* png)
 {
     int result = PNG_NO_ERROR;
     unsigned type;
@@ -731,7 +731,7 @@ png_process_chunk(png_t* png)
 }
 
 static int
-png_write_plte(png_t *png)
+png_write_plte(pnglite_t *png)
 {
     unsigned char plte[4 + 4 + 768 + 4];
     unsigned i;
@@ -756,7 +756,7 @@ png_write_plte(png_t *png)
 }
 
 static int
-png_write_trns(png_t *png)
+png_write_trns(pnglite_t *png)
 {
     unsigned char trns[4 + 4 + 256 + 4];
     unsigned i;
@@ -817,14 +817,14 @@ png_paeth_predictor(unsigned char a, unsigned char b, unsigned char c)
 }
 
 static int
-png_filter(png_t* png, unsigned char* data)
+png_filter(pnglite_t* png, unsigned char* data)
 {
     (void)(png); (void)(data);
     return PNG_NO_ERROR;
 }
 
 static int
-png_unfilter(png_t* png, unsigned char* data)
+png_unfilter(pnglite_t* png, unsigned char* data)
 {
     unsigned i, p, t;
     unsigned char a, b, c;
@@ -917,7 +917,7 @@ png_unpack_byte(unsigned char *dst, unsigned char *src, int depth)
 }
 
 static int
-png_unfilter_unpack(png_t *png, unsigned char *data)
+png_unfilter_unpack(pnglite_t *png, unsigned char *data)
 {
     int result;
     unsigned char *packed_pixels;
@@ -980,10 +980,10 @@ png_unfilter_unpack(png_t *png, unsigned char *data)
 
 /* Intentionally done the dumbest way possible. Who ever interlaces PNGs nowadays? Focus on correctness */
 static int
-png_deinterlace(png_t* png, unsigned char *data)
+png_deinterlace(pnglite_t* png, unsigned char *data)
 {
     int result = PNG_NO_ERROR;
-    png_t subpng;
+    pnglite_t subpng;
     /* set up invariants for subimages */
     png_init_copy(png, &subpng);
     subpng.color_type = png->color_type;
@@ -1125,7 +1125,7 @@ png_deinterlace(png_t* png, unsigned char *data)
 }
 
 int
-png_read_image(png_t* png, unsigned char* data)
+pnglite_read_image(pnglite_t* png, unsigned char* data)
 {
     int result = PNG_NO_ERROR;
 
@@ -1159,7 +1159,7 @@ png_read_image(png_t* png, unsigned char* data)
 }
 
 int
-png_write_image(png_t* png, unsigned width, unsigned height, char depth,
+pnglite_write_image(pnglite_t* png, unsigned width, unsigned height, char depth,
                         int color, int transparency, unsigned char* data)
 {
     unsigned i;
@@ -1212,7 +1212,7 @@ png_write_image(png_t* png, unsigned width, unsigned height, char depth,
     return PNG_NO_ERROR;
 }
 
-const char* png_error_string(int error)
+const char* pnglite_error_string(int error)
 {
     switch(error) {
     case PNG_NO_ERROR:

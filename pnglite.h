@@ -76,20 +76,20 @@ enum {
 };
 
 /* Typedefs for callbacks. */
-typedef size_t (*png_write_callback_t)(void* input, size_t size, size_t numel, void* user_pointer);
-typedef size_t (*png_read_callback_t)(void* output, size_t size, size_t numel, void* user_pointer);
-typedef void   (*png_free_t)(void* p);
-typedef void * (*png_alloc_t)(size_t s);
+typedef size_t (*pnglite_read_callback_t)(void* output, size_t size, size_t numel, void* user_pointer);
+typedef size_t (*pnglite_write_callback_t)(void* input, size_t size, size_t numel, void* user_pointer);
+typedef void * (*pnglite_alloc_t)(size_t s);
+typedef void   (*pnglite_free_t)(void* p);
 
 typedef struct {
     void*                   zs;             /* pointer to z_stream */
     int                     zerr;           /* last zlib call status */
     const char*             zmsg;           /* message for the last err or NULL */
 
-    png_read_callback_t     read;
-    png_write_callback_t    write;
-    png_alloc_t             alloc;
-    png_free_t              free;
+    pnglite_read_callback_t     read;
+    pnglite_write_callback_t    write;
+    pnglite_alloc_t             alloc;
+    pnglite_free_t              free;
     size_t                  chunk_size_limit;
     size_t                  image_data_limit;
     void*                   user_pointer;
@@ -111,7 +111,7 @@ typedef struct {
     unsigned char           interlace_method;
     unsigned char           stride;
     unsigned                pitch;
-} png_t;
+} pnglite_t;
 
 /**
  * Initializes a png_t object.
@@ -130,9 +130,9 @@ typedef struct {
  * @return PNG_WRONG_ARGUMENTS if both reader and writer are 0; PNG_NO_ERROR otherwise.
  */
 
-int png_init(png_t *png, void* user_pointer,
-             png_read_callback_t read_fun, png_read_callback_t write_fun,
-             png_alloc_t pngalloc, png_free_t pngfree,
+int pnglite_init(pnglite_t *png, void* user_pointer,
+             pnglite_read_callback_t read_fun, pnglite_read_callback_t write_fun,
+             pnglite_alloc_t pngalloc, pnglite_free_t pngfree,
              size_t chunk_size_limit, size_t image_data_limit);
 
 /**
@@ -141,7 +141,7 @@ int png_init(png_t *png, void* user_pointer,
  * @param png png_t object set for reading.
  * @return PNG_NO_ERROR on success, otherwise an error code.
  */
-int png_read_header(png_t* png);
+int pnglite_read_header(pnglite_t* png);
 
 /**
  * Writes decoded image data into given buffer.
@@ -152,7 +152,7 @@ int png_read_header(png_t* png);
  *
  * @return PNG_NO_ERROR on success, otherwise an error code.
  */
-int png_read_image(png_t* png, unsigned char* data);
+int pnglite_read_image(pnglite_t* png, unsigned char* data);
 
 /**
  * Writes out given image data.
@@ -166,7 +166,7 @@ int png_read_image(png_t* png, unsigned char* data);
  *
  * @return PNG_NO_ERROR on success, otherwise an error code.
  */
-int png_write_image(png_t* png, unsigned width, unsigned height, char depth, int color, int transparency, unsigned char* data);
+int pnglite_write_image(pnglite_t* png, unsigned width, unsigned height, char depth, int color, int transparency, unsigned char* data);
 
 /**
  * Returns a string representation of an error code
@@ -176,7 +176,7 @@ int png_write_image(png_t* png, unsigned width, unsigned height, char depth, int
  * @return pointer to string.
  */
 
-const char* png_error_string(int error);
+const char* pnglite_error_string(int error);
 
 #ifdef __cplusplus
 }

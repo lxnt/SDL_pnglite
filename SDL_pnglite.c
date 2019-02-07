@@ -90,7 +90,7 @@ int
 SDL_HeaderCheckPNG_RW(SDL_RWops *src, int freesrc, int *w, int *h, int *pf)
 {
     Sint64 fp_offset;
-    png_t png;
+    pnglite_t png;
     int rv;
 
     if (src == NULL) {
@@ -100,8 +100,8 @@ SDL_HeaderCheckPNG_RW(SDL_RWops *src, int freesrc, int *w, int *h, int *pf)
     fp_offset = SDL_RWtell(src);
     if (fp_offset == -1) { return -1; }
 
-    png_init(&png, src,  rwops_read_wrapper, 0, SDL_malloc, SDL_free, 0, 0);
-    rv = png_read_header(&png);
+    pnglite_init(&png, src,  rwops_read_wrapper, 0, SDL_malloc, SDL_free, 0, 0);
+    rv = pnglite_read_header(&png);
     switch(rv) {
         case PNG_NO_ERROR:     /* good PNG header */
             rv = 1;
@@ -113,7 +113,7 @@ SDL_HeaderCheckPNG_RW(SDL_RWops *src, int freesrc, int *w, int *h, int *pf)
             rv = -1;
             break;
         default:               /* bad CRC? */
-            SDL_SetError("png_read_header(): %s", png_error_string(rv));
+            SDL_SetError("pnglite_read_header(): %s", pnglite_error_string(rv));
             rv = -1;
             break;
     }
@@ -160,7 +160,7 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
     SDL_Color colorset[256];
     SDL_Palette *palette = NULL;
     int rv;
-    png_t png;
+    pnglite_t png;
     Uint8  *data = NULL;
     int bpp = 32;
     Uint32 Rmask = 0;
@@ -182,15 +182,15 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
         goto error;
     }
 
-    png_init(&png, src, rwops_read_wrapper, 0, SDL_malloc, SDL_free, 0, 0);
+    pnglite_init(&png, src, rwops_read_wrapper, 0, SDL_malloc, SDL_free, 0, 0);
 
     fp_offset = SDL_RWtell(src);
     if (fp_offset == -1)
         goto error;
 
-    rv = png_read_header(&png);
+    rv = pnglite_read_header(&png);
     if (rv != PNG_NO_ERROR) {
-        SDL_SetError("png_read_header(): %s", png_error_string(rv));
+        SDL_SetError("pnglite_read_header(): %s", pnglite_error_string(rv));
         goto error;
     }
 
@@ -209,9 +209,9 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
             if (!surface) {
                 goto error;
             }
-            rv = png_read_image(&png, surface->pixels);
+            rv = pnglite_read_image(&png, surface->pixels);
             if (rv != PNG_NO_ERROR) {
-                SDL_SetError("png_get_data(): %s", png_error_string(rv));
+                SDL_SetError("pnglite_read_image(): %s", pnglite_error_string(rv));
                 goto error;
             }
             if ((unsigned)surface->pitch != png.pitch) {
@@ -231,9 +231,9 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
             if (!surface) {
                 goto error;
             }
-            rv = png_read_image(&png, surface->pixels);
+            rv = pnglite_read_image(&png, surface->pixels);
             if (rv != PNG_NO_ERROR) {
-                SDL_SetError("png_get_data(): %s", png_error_string(rv));
+                SDL_SetError("pnglite_read_image(): %s", pnglite_error_string(rv));
                 goto error;
             }
             for (row = png.height; row > 0; row --) {
@@ -262,9 +262,9 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 goto error;
             }
 
-            rv = png_read_image(&png, data);
+            rv = pnglite_read_image(&png, data);
             if (rv != PNG_NO_ERROR) {
-                SDL_SetError("png_get_data(): %s", png_error_string(rv));
+                SDL_SetError("pnglite_read_image(): %s", pnglite_error_string(rv));
                 goto error;
             }
 
@@ -326,9 +326,9 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 SDL_OutOfMemory();
                 goto error;
             }
-            rv = png_read_image(&png, data);
+            rv = pnglite_read_image(&png, data);
             if (rv != PNG_NO_ERROR) {
-                SDL_SetError("png_get_data(): %s", png_error_string(rv));
+                SDL_SetError("pnglite_read_image(): %s", pnglite_error_string(rv));
                 goto error;
             }
             for(pixel = 0 ; pixel < png.width * png.height ; pixel++) {
@@ -348,9 +348,9 @@ SDL_LoadPNG_RW(SDL_RWops * src, int freesrc)
                 SDL_OutOfMemory();
                 goto error;
             }
-            rv = png_read_image(&png, data);
+            rv = pnglite_read_image(&png, data);
             if (rv != PNG_NO_ERROR) {
-                SDL_SetError("png_get_data(): %s", png_error_string(rv));
+                SDL_SetError("pnglite_read_image(): %s", pnglite_error_string(rv));
                 goto error;
             }
 
@@ -427,7 +427,7 @@ SDL_SavePNG32_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
 {
     SDL_Surface *tmp = NULL;
     SDL_PixelFormat *format = NULL;
-    png_t png;
+    pnglite_t png;
     Uint8 *data = NULL;
     Uint8 png_color_type;
     int i;
@@ -484,11 +484,11 @@ SDL_SavePNG32_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
     }
 
     /* write out and be done */
-    png_init(&png, dst, 0, rwops_write_wrapper, SDL_malloc, SDL_free, 0, 0);
+    pnglite_init(&png, dst, 0, rwops_write_wrapper, SDL_malloc, SDL_free, 0, 0);
 
-    rv = png_write_image(&png, tmp->w, tmp->h, 8, png_color_type, transparency_present, data);
+    rv = pnglite_write_image(&png, tmp->w, tmp->h, 8, png_color_type, transparency_present, data);
     if (rv != PNG_NO_ERROR) {
-        SDL_SetError("png_write_image(): %s", png_error_string(rv));
+        SDL_SetError("pnglite_write_image(): %s", pnglite_error_string(rv));
         goto error;
     }
     rv = 0;
@@ -517,7 +517,7 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
 {
     Uint8 *data = NULL, *ptr, *pixels;
     int i, j, rv;
-    png_t png;
+    pnglite_t png;
     int transparency_present = 0;
     Uint32 colorkey;
 
@@ -646,14 +646,14 @@ SDL_SavePNG_RW(SDL_Surface * src, SDL_RWops * dst, int freedst)
     }
 
     /* write out and be done */
-    png_init(&png, dst, 0, rwops_write_wrapper, SDL_malloc, SDL_free, 0, 0);
+    pnglite_init(&png, dst, 0, rwops_write_wrapper, SDL_malloc, SDL_free, 0, 0);
 
-    rv = png_write_image(&png, src->w, src->h, 8, PNG_INDEXED, transparency_present, data);
+    rv = pnglite_write_image(&png, src->w, src->h, 8, PNG_INDEXED, transparency_present, data);
     if (rv != PNG_NO_ERROR) {
         if (rv == PNG_MEMORY_ERROR) {
             SDL_Error(SDL_ENOMEM);
         } else if (rv != PNG_IO_ERROR) {
-            SDL_SetError("png_open_write(): %s", png_error_string(rv));
+            SDL_SetError("pnglite_write_image(): %s", pnglite_error_string(rv));
         }
         goto error;
     }
